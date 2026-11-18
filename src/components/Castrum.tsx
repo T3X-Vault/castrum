@@ -11,6 +11,7 @@ import {
   Minimize,
   Pause,
   Play,
+  Settings,
   Shield,
   Target,
   Volume2,
@@ -93,6 +94,8 @@ export function Castrum() {
   const hud = useHud();
   const [bootError, setBootError] = useState<string | null>(null);
   const [armory, setArmory] = useState(true);
+  const [gearOpen, setGearOpen] = useState(false);
+  const [linkNote, setLinkNote] = useState<null | "wallet" | "t3x">(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
@@ -138,100 +141,39 @@ export function Castrum() {
   return (
     <div className="castrum" ref={rootRef} data-quiet={hud.fighting ? "true" : "false"}>
       {hud.phase !== "menu" && (
-        <header className="hud" data-quiet={hud.fighting ? "true" : "false"}>
-          {choosing && (
-            <div className="brand">
-              <span className="eyebrow">Legio IX</span>
-              <span className="word">CASTRUM</span>
-            </div>
-          )}
-          <div className="stat">
-            <span>Denarii</span>
-            <strong className="bump" key={hud.gold}>
-              {hud.gold}
-            </strong>
-          </div>
-          <div className="stat gate">
-            <span>Gate {hud.fort}</span>
-            <div className="gate-bar" aria-hidden="true">
-              <span className="gate-fill" style={{ width: `${gatePct}%` }} />
-            </div>
-          </div>
-          {choosing && (
-            <div className="stat walls">
-              <span>Walls</span>
-              <strong>{hud.masonryName}</strong>
-            </div>
-          )}
-          <div className="stat">
-            <span>Wave</span>
-            <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
-          </div>
-          {hud.boss && (
-            <div className="stat boss">
-              <span>
-                {hud.boss.name} {Math.ceil(hud.boss.hp)}
+        <header className="hud">
+          <div className="readout">
+            <span className="readout-bit">
+              <span>Denarii</span>
+              <strong className="bump" key={hud.gold}>
+                {hud.gold}
+              </strong>
+            </span>
+            <span className="readout-bit gate">
+              <span>Gate {hud.fort}</span>
+              <span className="gate-bar" aria-hidden="true">
+                <span className="gate-fill" style={{ width: `${gatePct}%` }} />
               </span>
-              <div className="gate-bar">
-                <span className="gate-fill" style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.max) * 100)}%` }} />
-              </div>
-            </div>
-          )}
+            </span>
+            <span className="readout-bit">
+              <span>Wave</span>
+              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
+            </span>
+            {hud.boss && (
+              <span className="readout-bit boss">
+                <span>
+                  {hud.boss.name} {Math.ceil(hud.boss.hp)}
+                </span>
+                <span className="gate-bar">
+                  <span className="gate-fill" style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.max) * 100)}%` }} />
+                </span>
+              </span>
+            )}
+          </div>
           <div className="hud-actions">
             {choosing && (
-              <button className="primary" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
-                Sound the bucina
-              </button>
-            )}
-            {choosing && (
-              <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
-                <Castle size={16} aria-hidden="true" /> {hud.masonryNext ?? "Castrum complete"}
-                {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
-              </button>
-            )}
-            <button className="icon-btn" onClick={() => press({ t: "speed" })} aria-label={`Speed times ${hud.speed}`}>
-              ×{hud.speed}
-            </button>
-            <button
-              className="icon-btn"
-              onClick={() => press({ t: "pause" })}
-              aria-label={hud.phase === "paused" ? "Resume" : "Pause"}
-            >
-              {hud.phase === "paused" ? <Play size={18} /> : <Pause size={18} />}
-            </button>
-            {choosing && (
-              <button
-                className="icon-btn"
-                data-on={hud.muted ? "true" : "false"}
-                onClick={() => press({ t: "mute" })}
-                aria-label={hud.muted ? "Unmute" : "Mute"}
-              >
-                {hud.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-              </button>
-            )}
-            {choosing && (
-              <button
-                className="icon-btn"
-                data-on={hud.shakeOn ? "true" : "false"}
-                onClick={() => press({ t: "shake" })}
-                aria-label={hud.shakeOn ? "Turn screen shake off" : "Turn screen shake on"}
-              >
-                <Vibrate size={18} />
-              </button>
-            )}
-            {choosing && (
-              <button className="icon-btn" onClick={() => press({ t: "manual", open: true })} aria-label="Field manual">
-                <BookOpen size={18} />
-              </button>
-            )}
-            {screen.supported && (
-              <button
-                className="icon-btn"
-                data-on={screen.active ? "true" : "false"}
-                onClick={screen.toggle}
-                aria-label={screen.active ? "Leave fullscreen" : "Fill the screen"}
-              >
-                {screen.active ? <Minimize size={18} /> : <Maximize size={18} />}
+              <button className="ghost horn" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
+                Horn
               </button>
             )}
             {inMatch && (
@@ -245,6 +187,57 @@ export function Castrum() {
                 Engines
               </button>
             )}
+            <div className="gear">
+              <button
+                className="icon-btn"
+                data-on={gearOpen ? "true" : "false"}
+                aria-expanded={gearOpen}
+                aria-label="Settings"
+                onClick={() => setGearOpen((open) => !open)}
+              >
+                <Settings size={18} />
+              </button>
+              {gearOpen && (
+                <div className="gear-panel" role="group" aria-label="Settings">
+                  <button className="ghost" onClick={() => press({ t: "pause" })}>
+                    {hud.phase === "paused" ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
+                    {hud.phase === "paused" ? "Resume" : "Pause"}
+                  </button>
+                  <button className="ghost" data-on={hud.muted ? "false" : "true"} onClick={() => press({ t: "mute" })}>
+                    {hud.muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+                    {hud.muted ? "Sound off" : "Sound on"}
+                  </button>
+                  <button className="ghost" data-on={hud.shakeOn ? "true" : "false"} onClick={() => press({ t: "shake" })}>
+                    <Vibrate size={16} aria-hidden="true" />
+                    {hud.shakeOn ? "Vibration on" : "Vibration off"}
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      setGearOpen(false);
+                      press({ t: "manual", open: true });
+                    }}
+                  >
+                    <BookOpen size={16} aria-hidden="true" />
+                    Menu
+                  </button>
+                  <button className="ghost" onClick={() => press({ t: "speed" })}>
+                    Speed ×{hud.speed}
+                  </button>
+                  <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
+                    <Castle size={16} aria-hidden="true" />
+                    {hud.masonryNext ?? "Walls complete"}
+                    {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
+                  </button>
+                  {screen.supported && (
+                    <button className="ghost" onClick={screen.toggle}>
+                      {screen.active ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}
+                      {screen.active ? "Leave fullscreen" : "Fill the screen"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </header>
       )}
@@ -268,30 +261,44 @@ export function Castrum() {
         {bootError && <p className="boot-error">{bootError}</p>}
 
         {hud.phase === "menu" && (
-          <section className="menu">
-            <p className="eyebrow">Legio IX Hispana</p>
-            <h1>CASTRUM</h1>
-            <p className="lede">Build the fort. Hold the ford. The far bank is already moving.</p>
-            <ol className="steps">
-              <li>Choose an engine and set it on a stone pad.</li>
-              <li>Raise the castrum — click the fort, or the masonry order.</li>
-              <li>Drag the field to look around. WASD or arrows slide. Scroll zooms. R resets.</li>
-            </ol>
-            <div className="menu-actions">
-              <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
-                Take command
-              </button>
-              <button className="ghost" onClick={() => press({ t: "manual", open: true })}>
-                Field manual
-              </button>
-              {screen.supported && (
-                <button className="icon-btn" onClick={screen.toggle} aria-label={screen.active ? "Leave fullscreen" : "Fill the screen"}>
-                  {screen.active ? <Minimize size={18} /> : <Maximize size={18} />}
+          <>
+            <p className="trailer-chip">Trailer</p>
+            <section className="menu">
+              <h1>CASTRUM</h1>
+              <p className="lede">Hold the ford.</p>
+              <div className="menu-actions">
+                <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
+                  Start game
                 </button>
+                <button
+                  className="ghost"
+                  aria-pressed={linkNote === "wallet"}
+                  onClick={() => setLinkNote((note) => (note === "wallet" ? null : "wallet"))}
+                >
+                  Connect wallet
+                </button>
+                <button
+                  className="ghost"
+                  aria-pressed={linkNote === "t3x"}
+                  onClick={() => setLinkNote((note) => (note === "t3x" ? null : "t3x"))}
+                >
+                  T3X
+                </button>
+              </div>
+              {linkNote === "wallet" && (
+                <p className="unwired" role="status">
+                  No wallet is connected. This game does not sign in to one.
+                </p>
               )}
-            </div>
-            {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
-          </section>
+              {linkNote === "t3x" && (
+                <p className="unwired" role="status">
+                  T3X is not connected in this build.
+                </p>
+              )}
+              {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
+              <p className="credit">Created by Futuret3ch</p>
+            </section>
+          </>
         )}
 
         {hud.phase === "paused" && (
@@ -340,10 +347,10 @@ export function Castrum() {
             <p>
               Engines shoot whoever is furthest down the road unless you change their aim. First protects the gate.
               Stones and oil punish armor, rams, and elephants. The engines tray is open while you choose, and it folds
-              away when the bucina sounds. Engines brings it back. The frame control fills the screen. Drag to orbit
-              the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R resets the eye. WASD and the
-              arrows move the view. Keys: 1–6 arm an engine, Space calls the host, U improves the selected engine, M
-              raises the fort, T cycles aim, Q changes speed, Esc pauses.
+              away when the horn sounds. Engines brings it back. Pause, sound, vibration, speed, and the walls live
+              under the cog. Drag to orbit the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R
+              resets the eye. WASD and the arrows move the view. Keys: 1–6 arm an engine, Space calls the host, U
+              improves the selected engine, M raises the fort, T cycles aim, Q changes speed, Esc pauses.
             </p>
             <div className="manual-grid">
               {TOWER_KINDS.map((kind) => {

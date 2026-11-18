@@ -433,6 +433,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         const plus = pad.getObjectByName("plus");
         if (plus) plus.visible = false;
       }
+      resetEye();
       publish();
       return;
     }
@@ -447,6 +448,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       applyMasonry(0, true);
       intro = reduced ? 1 : 0;
       waveTitle = "";
+      resetEye();
       say("The ford is yours. Set an engine.");
       publish();
       return;
@@ -1139,15 +1141,15 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     }
   }
 
-  function fitCamera(aspect: number, orbit: number) {
+  function fitCamera(aspect: number, shot?: { orbit: number; panX: number; panZ: number; zoom: number }) {
     const fov = (camera.fov * Math.PI) / 180;
     const distH = 9.6 / Math.tan(fov / 2);
     const distW = 12 / Math.tan(fov / 2) / Math.max(0.4, aspect);
-    const dist = Math.max(distH, distW) * (1.16 - 0.16 * intro) * camZoom;
-    const yaw = BASE_YAW + camYaw + orbit;
-    const pitch = THREE.MathUtils.clamp(BASE_PITCH + camPitch, 0.28, 1.28);
+    const dist = Math.max(distH, distW) * (1.16 - 0.16 * intro) * (shot?.zoom ?? camZoom);
+    const yaw = BASE_YAW + (shot ? 0 : camYaw) + (shot?.orbit ?? 0);
+    const pitch = THREE.MathUtils.clamp(BASE_PITCH + (shot ? 0 : camPitch), 0.28, 1.28);
     DIR.set(Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw));
-    CAM_LOOK.set(LOOK.x + panX, LOOK.y, LOOK.z + panZ);
+    CAM_LOOK.set(LOOK.x + (shot?.panX ?? panX), LOOK.y, LOOK.z + (shot?.panZ ?? panZ));
     camera.position.copy(CAM_LOOK).addScaledVector(DIR, dist);
     camera.lookAt(CAM_LOOK);
     basePos.copy(camera.position);
@@ -1244,8 +1246,17 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     }
     intro = Math.min(1, intro + dt * (reduced ? 4 : 0.8));
     slideEye(dt);
-    const orbit = phase === "menu" && !reduced && !camUser ? Math.sin(now / 1000 * 0.18) * 0.18 : 0;
-    fitCamera(camera.aspect, orbit);
+    let shot: { orbit: number; panX: number; panZ: number; zoom: number } | undefined;
+    if (phase === "menu" && !camUser) {
+      if (reduced) shot = { orbit: 0.22, panX: 1.4, panZ: 0.4, zoom: 0.9 };
+      else {
+        const u = ((now / 1000) % 16) / 16;
+        const s = Math.sin(u * Math.PI * 2);
+        const c = Math.cos(u * Math.PI * 2);
+        shot = { orbit: s * 0.5, panX: s * 3.6, panZ: c * 2.1, zoom: 0.82 + (0.5 + 0.5 * c) * 0.2 };
+      }
+    }
+    fitCamera(camera.aspect, shot);
     if (shakeOn && trauma > 0) {
       trauma = Math.max(0, trauma - dt * 1.7);
       const s = trauma * trauma;
