@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { distToPath, layout, type EnemyKind, type Path, type TowerKind } from "./balance";
+import { distToPath, layout, type Path, type TowerKind } from "./balance";
+import { makeEagle, makeFlame, makePennant, makePerson, makeShield, paint } from "./figures";
 
 const BODY = new THREE.MeshStandardMaterial({
   vertexColors: true,
@@ -9,28 +10,11 @@ const BODY = new THREE.MeshStandardMaterial({
   flatShading: true,
 });
 
-export const GOLD = new THREE.MeshStandardMaterial({
-  color: "#e6c36a",
-  roughness: 0.38,
-  metalness: 0.72,
-  emissive: "#6a4a10",
-  emissiveIntensity: 0.35,
-  flatShading: true,
-});
-
-export const FLAME = new THREE.MeshStandardMaterial({
-  color: "#ffb15a",
-  emissive: "#ff6a1a",
-  emissiveIntensity: 1.6,
-  roughness: 0.45,
-  flatShading: true,
-});
-
 const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1),
-  sph: new THREE.SphereGeometry(1, 7, 5),
-  cyl: new THREE.CylinderGeometry(1, 1, 1, 6),
-  cone: new THREE.ConeGeometry(1, 1, 6),
+  sph: new THREE.SphereGeometry(1, 10, 8),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, 8),
+  cone: new THREE.ConeGeometry(1, 1, 8),
   ico: new THREE.IcosahedronGeometry(1, 0),
   dod: new THREE.DodecahedronGeometry(1, 0),
 };
@@ -81,11 +65,11 @@ function stamp(
   return g;
 }
 
-function fuse(parts: THREE.BufferGeometry[], name = "body") {
+function fuse(parts: THREE.BufferGeometry[], name = "body", material: THREE.Material = BODY) {
   const geo = mergeGeometries(parts, false);
   if (!geo) throw new Error("mesh merge failed");
   for (const part of parts) part.dispose();
-  const mesh = new THREE.Mesh(geo, BODY);
+  const mesh = new THREE.Mesh(geo, material);
   mesh.castShadow = true;
   mesh.name = name;
   return mesh;
@@ -102,246 +86,167 @@ function mulberry32(seed: number) {
   };
 }
 
-const SKIN = "#e2b394";
-const SKIN2 = "#c98462";
+const worldTime = { value: 0 };
+const riverTime = { value: 0 };
+
+export function tickScenery(time: number) {
+  worldTime.value = time;
+  riverTime.value = time;
+}
+
+const SCENERY = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.92,
+  metalness: 0.02,
+});
+
+const FOLIAGE = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.88,
+  metalness: 0,
+});
+FOLIAGE.onBeforeCompile = (shader) => {
+  shader.uniforms.uTime = worldTime;
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", "#include <common>\nuniform float uTime;")
+    .replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+       float sway = sin(uTime * 1.25 + position.y * 1.4) * position.y * 0.035;
+       transformed.x += sway;
+       transformed.z += cos(uTime * 1.05 + position.y) * position.y * 0.02;`,
+    );
+};
+
 const TUNIC = "#9e2d2a";
 const METAL = "#c5ccd2";
 const BRONZE = "#a8844a";
 const WOOD = "#7a4e2e";
-const FUR = "#6a4b34";
 const STONE = "#d5ccbe";
 const STONE2 = "#b7ab9a";
-const CLOTH = "#3e4650";
 const OLIVE = "#6e8a42";
 const OLIVE2 = "#3f5a30";
 
-function human(o: {
-  skin?: string;
-  cloth: string;
-  metal?: string;
-  hair: string;
-  shield?: string;
-  weapon: "axe" | "sword" | "falx" | "spear" | "bow" | "none";
-  helm?: boolean;
-  crest?: string;
-  cloak?: string;
-  k?: number;
-}) {
-  const k = o.k ?? 1;
-  const skin = o.skin ?? SKIN;
-  const metal = o.metal ?? METAL;
-  const parts: THREE.BufferGeometry[] = [];
-  const S = (x: number) => x * k;
-  parts.push(stamp(UNIT.box, skin, S(-0.1), S(0.28), S(0.12), 0.15, 0, 0, S(0.16), S(0.52), S(0.16)));
-  parts.push(stamp(UNIT.box, skin, S(0.11), S(0.26), S(-0.1), -0.2, 0, 0, S(0.16), S(0.5), S(0.16)));
-  parts.push(stamp(UNIT.box, o.cloth, 0, S(0.74), 0, 0, 0, 0, S(0.42), S(0.46), S(0.22)));
-  parts.push(stamp(UNIT.sph, skin, 0, S(1.12), S(0.02), 0, 0, 0, S(0.16), S(0.17), S(0.16)));
-  if (o.helm) {
-    parts.push(stamp(UNIT.sph, metal, 0, S(1.18), 0, 0, 0, 0, S(0.18), S(0.12), S(0.18)));
-    if (o.crest) parts.push(stamp(UNIT.box, o.crest, 0, S(1.32), 0, 0, 0, 0, S(0.06), S(0.16), S(0.28)));
-  } else {
-    parts.push(stamp(UNIT.sph, o.hair, 0, S(1.2), S(-0.02), 0, 0, 0, S(0.17), S(0.12), S(0.17)));
-  }
-  parts.push(stamp(UNIT.box, skin, S(-0.28), S(0.78), S(0.04), 0.4, 0, 0.15, S(0.12), S(0.38), S(0.12)));
-  parts.push(stamp(UNIT.box, skin, S(0.28), S(0.76), S(0.08), -0.5, 0, -0.2, S(0.12), S(0.38), S(0.12)));
-  if (o.cloak) {
-    parts.push(stamp(UNIT.box, o.cloak, 0, S(0.78), S(-0.16), 0.15, 0, 0, S(0.4), S(0.62), S(0.06)));
-  }
-  if (o.shield) {
-    parts.push(stamp(UNIT.cyl, o.shield, S(-0.36), S(0.86), S(0.16), Math.PI / 2, 0, 0, S(0.3), S(0.08), S(0.42)));
-    parts.push(stamp(UNIT.sph, BRONZE, S(-0.36), S(0.86), S(0.22), 0, 0, 0, S(0.08), S(0.08), S(0.08)));
-  }
-  if (o.weapon === "axe") {
-    parts.push(stamp(UNIT.box, WOOD, S(0.4), S(0.9), S(0.18), 0, 0, 0.4, S(0.06), S(0.55), S(0.06)));
-    parts.push(stamp(UNIT.box, metal, S(0.52), S(1.12), S(0.22), 0, 0, 0.2, S(0.22), S(0.16), S(0.04)));
-  } else if (o.weapon === "sword") {
-    parts.push(stamp(UNIT.box, metal, S(0.4), S(0.95), S(0.22), 0.2, 0, -0.4, S(0.05), S(0.62), S(0.02)));
-  } else if (o.weapon === "falx") {
-    for (let i = 0; i < 4; i++) {
-      const a = -0.2 + i * 0.45;
-      parts.push(
-        stamp(UNIT.box, metal, S(0.38), S(0.95 + i * 0.12), S(0.16 + i * 0.05), 0, 0, a, S(0.05), S(0.2), S(0.04)),
-      );
-    }
-  } else if (o.weapon === "spear") {
-    parts.push(stamp(UNIT.box, WOOD, S(0.34), S(1.05), S(0.12), 0, 0, 0.15, S(0.05), S(0.95), S(0.05)));
-    parts.push(stamp(UNIT.cone, metal, S(0.4), S(1.55), S(0.16), 0, 0, 0.2, S(0.07), S(0.18), S(0.07)));
-  } else if (o.weapon === "bow") {
-    parts.push(stamp(UNIT.box, WOOD, S(0.34), S(0.95), S(0.2), 0.6, 0, 0, S(0.04), S(0.55), S(0.04)));
-  }
-  return parts;
-}
+const PLANK = new THREE.BoxGeometry(1, 1, 1);
+const POST = new THREE.CylinderGeometry(1, 1, 1, 8);
+const CAULDRON = new THREE.LatheGeometry(
+  [
+    new THREE.Vector2(0.05, 0),
+    new THREE.Vector2(0.22, 0.06),
+    new THREE.Vector2(0.26, 0.22),
+    new THREE.Vector2(0.16, 0.34),
+    new THREE.Vector2(0.2, 0.4),
+  ],
+  12,
+);
 
-export function makeEnemy(kind: EnemyKind) {
-  const group = new THREE.Group();
-  group.name = kind;
-  if (kind === "raider") {
-    group.add(fuse(human({ cloth: FUR, hair: "#d9b56a", weapon: "axe", cloak: FUR })));
-  } else if (kind === "gaul") {
-    group.add(
-      fuse(
-        human({
-          cloth: "#2f5f86",
-          hair: "#efe0a0",
-          weapon: "sword",
-          shield: "#c4a574",
-        }),
-      ),
-    );
-  } else if (kind === "dacian") {
-    group.add(fuse(human({ cloth: "#8aa0aa", hair: "#3a2a24", weapon: "falx", helm: true, metal: BRONZE })));
-  } else if (kind === "berserker") {
-    const parts = human({ skin: SKIN2, cloth: "#6b2a24", hair: "#1c140f", weapon: "axe", cloak: "#4a3424", k: 1.18 });
-    parts.push(stamp(UNIT.sph, "#4a3428", 0, 1.45, -0.05, 0, 0, 0, 0.22, 0.16, 0.22));
-    group.add(fuse(parts));
-  } else if (kind === "warlord") {
-    const parts = human({
-      skin: SKIN2,
-      cloth: "#4a2030",
-      hair: "#1a120e",
-      weapon: "axe",
-      cloak: "#2a1c22",
-      helm: true,
-      metal: "#8d8f96",
-      crest: "#e3c16e",
-      k: 1.22,
-    });
-    parts.push(stamp(UNIT.cone, "#e3c16e", -0.1, 1.55, 0, 0, 0, 0, 0.06, 0.14, 0.06));
-    parts.push(stamp(UNIT.cone, "#e3c16e", 0.1, 1.55, 0, 0, 0, 0, 0.06, 0.14, 0.06));
-    parts.push(stamp(UNIT.box, TUNIC, 0.05, 1.7, -0.05, 0, 0, 0, 0.04, 0.55, 0.36));
-    group.add(fuse(parts));
-  } else if (kind === "cataphract") {
-    const parts: THREE.BufferGeometry[] = [];
-    parts.push(stamp(UNIT.box, BRONZE, 0, 0.78, 0, 0, 0, 0, 0.36, 0.38, 1.15));
-    parts.push(stamp(UNIT.box, BRONZE, 0, 1.05, 0.62, -0.7, 0, 0, 0.2, 0.42, 0.22));
-    parts.push(stamp(UNIT.box, BRONZE, 0, 1.22, 0.86, 0, 0, 0, 0.18, 0.16, 0.32));
-    parts.push(stamp(UNIT.box, "#6a4a30", 0, 0.72, -0.7, 0.4, 0, 0, 0.08, 0.08, 0.28));
-    parts.push(stamp(UNIT.box, BRONZE, -0.14, 0.48, 0.28, 0.3, 0, 0, 0.12, 0.48, 0.12));
-    parts.push(stamp(UNIT.box, BRONZE, 0.14, 0.48, 0.22, -0.2, 0, 0, 0.12, 0.48, 0.12));
-    parts.push(stamp(UNIT.box, BRONZE, -0.14, 0.46, -0.32, -0.25, 0, 0, 0.12, 0.46, 0.12));
-    parts.push(stamp(UNIT.box, BRONZE, 0.14, 0.48, -0.22, 0.35, 0, 0, 0.12, 0.46, 0.12));
-    parts.push(stamp(UNIT.box, TUNIC, 0, 1.28, 0.05, 0, 0, 0, 0.28, 0.32, 0.18));
-    parts.push(stamp(UNIT.sph, SKIN, 0, 1.58, 0.06, 0, 0, 0, 0.12, 0.13, 0.12));
-    parts.push(stamp(UNIT.sph, METAL, 0, 1.66, 0.04, 0, 0, 0, 0.14, 0.08, 0.14));
-    parts.push(stamp(UNIT.box, WOOD, 0.12, 1.45, 0.2, 0, 0, 0.1, 0.04, 1.15, 0.04));
-    parts.push(stamp(UNIT.cone, METAL, 0.16, 2.05, 0.22, 0, 0, 0.1, 0.05, 0.16, 0.05));
-    group.add(fuse(parts));
-  } else if (kind === "elephant") {
-    const parts: THREE.BufferGeometry[] = [];
-    parts.push(stamp(UNIT.sph, "#9a968e", 0, 0.95, 0, 0, 0, 0, 0.72, 0.58, 1.05));
-    for (const [x, z] of [
-      [-0.32, 0.42],
-      [0.32, 0.38],
-      [-0.32, -0.42],
-      [0.34, -0.38],
-    ] as const) {
-      parts.push(stamp(UNIT.cyl, "#8d8982", x, 0.42, z, 0, 0, 0, 0.14, 0.7, 0.14));
-    }
-    parts.push(stamp(UNIT.sph, "#a29e96", 0, 1.15, 0.95, 0, 0, 0, 0.38, 0.34, 0.4));
-    parts.push(stamp(UNIT.sph, "#8a8680", 0, 0.85, 1.25, 0.5, 0, 0, 0.12, 0.12, 0.22));
-    parts.push(stamp(UNIT.sph, "#8a8680", 0, 0.62, 1.32, 0.8, 0, 0, 0.1, 0.1, 0.18));
-    parts.push(stamp(UNIT.sph, "#b7b2a8", -0.55, 1.15, 0.55, 0, 0, 0.4, 0.28, 0.08, 0.22));
-    parts.push(stamp(UNIT.sph, "#b7b2a8", 0.55, 1.15, 0.55, 0, 0, -0.4, 0.28, 0.08, 0.22));
-    parts.push(stamp(UNIT.cone, "#efe8dc", -0.18, 0.95, 1.25, Math.PI / 2, 0, 0.2, 0.06, 0.32, 0.06));
-    parts.push(stamp(UNIT.cone, "#efe8dc", 0.18, 0.95, 1.25, Math.PI / 2, 0, -0.2, 0.06, 0.32, 0.06));
-    parts.push(stamp(UNIT.box, WOOD, 0, 1.55, -0.05, 0, 0, 0, 0.55, 0.28, 0.48));
-    parts.push(stamp(UNIT.box, TUNIC, 0, 1.82, 0, 0, 0, 0, 0.22, 0.26, 0.16));
-    parts.push(stamp(UNIT.sph, SKIN, 0, 2.05, 0.02, 0, 0, 0, 0.1, 0.1, 0.1));
-    group.add(fuse(parts));
-  } else {
-    const parts: THREE.BufferGeometry[] = [];
-    parts.push(stamp(UNIT.box, "#5c4636", 0, 0.72, 0, 0, 0, 0, 0.78, 0.55, 1.25));
-    parts.push(stamp(UNIT.box, "#3e342c", 0, 1.02, 0, 0, 0, 0, 0.86, 0.12, 1.32));
-    parts.push(stamp(UNIT.cone, BRONZE, 0, 0.72, 0.78, Math.PI / 2, 0, 0, 0.18, 0.42, 0.18));
-    parts.push(stamp(UNIT.box, WOOD, -0.28, 0.55, 0.15, 0, 0, 0, 0.08, 0.28, 0.08));
-    parts.push(stamp(UNIT.box, WOOD, 0.28, 0.55, -0.1, 0, 0, 0, 0.08, 0.28, 0.08));
-    group.add(fuse(parts));
-    const axle = (z: number) => {
-      const mesh = fuse([
-        stamp(UNIT.cyl, WOOD, -0.46, 0, 0, 0, 0, Math.PI / 2, 0.18, 0.1, 0.18),
-        stamp(UNIT.cyl, WOOD, 0.46, 0, 0, 0, 0, Math.PI / 2, 0.18, 0.1, 0.18),
-      ]);
-      mesh.name = "axle";
-      mesh.position.set(0, 0.28, z);
-      return mesh;
-    };
-    group.add(axle(0.42));
-    group.add(axle(-0.42));
-  }
-  group.traverse((obj) => {
-    obj.castShadow = true;
-  });
-  return group;
-}
-
-function pennant(color: string, y: number) {
-  const mesh = fuse([stamp(UNIT.box, color, 0.26, 0, 0, 0, 0, 0, 0.46, 0.28, 0.03)]);
-  mesh.name = "pennant";
-  mesh.position.y = y;
+function timber(
+  geo: THREE.BufferGeometry,
+  material: THREE.Material,
+  x: number,
+  y: number,
+  z: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+  sx = 1,
+  sy = 1,
+  sz = 1,
+) {
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.position.set(x, y, z);
+  mesh.rotation.set(rx, ry, rz);
+  mesh.scale.set(sx, sy, sz);
+  mesh.castShadow = true;
   return mesh;
 }
+
+function hangPennant(parent: THREE.Object3D, color: string, y: number, z = -0.15) {
+  const flag = makePennant(color);
+  flag.position.set(0.02, y, z);
+  parent.add(flag);
+  const pole = timber(POST, paint(WOOD, 0.84, 0.04), 0, y - 0.28, z, 0, 0, 0, 0.025, 0.7, 0.025);
+  parent.add(pole);
+}
+
+export { makeEnemy } from "./figures";
 
 export function makeTower(kind: TowerKind) {
   const g = new THREE.Group();
   g.name = kind;
-  const color = kind === "scorpio" ? "#c4a15a" : kind === "sagittarii" ? "#8ea36a" : kind === "cohort" ? TUNIC : kind === "ballista" ? "#e3c16e" : kind === "naphtha" ? "#e07a32" : "#8aa0ad";
-  const plinth = [
-    stamp(UNIT.cyl, STONE, 0, 0.1, 0, 0, 0, 0, 0.85, 0.2, 0.85),
-    stamp(UNIT.cyl, STONE2, 0, 0.22, 0, 0, 0, 0, 0.62, 0.08, 0.62),
-  ];
+  const color =
+    kind === "scorpio"
+      ? "#c4a15a"
+      : kind === "sagittarii"
+        ? "#8ea36a"
+        : kind === "cohort"
+          ? TUNIC
+          : kind === "ballista"
+            ? "#e3c16e"
+            : kind === "naphtha"
+              ? "#e07a32"
+              : "#8aa0ad";
+  const wood = paint(WOOD, 0.84, 0.04);
+  const bronze = paint(BRONZE, 0.4, 0.66);
+  const metal = paint(METAL, 0.32, 0.74);
+  g.add(
+    fuse([
+      stamp(UNIT.cyl, STONE, 0, 0.1, 0, 0, 0, 0, 0.85, 0.2, 0.85),
+      stamp(UNIT.cyl, STONE2, 0, 0.22, 0, 0, 0, 0, 0.62, 0.08, 0.62),
+    ]),
+  );
+  const aim = new THREE.Group();
+  aim.name = "aim";
+  g.add(aim);
+
   if (kind === "scorpio") {
-    g.add(fuse([...plinth, stamp(UNIT.box, WOOD, 0, 0.48, 0, 0, 0, 0, 0.18, 0.16, 0.9), stamp(UNIT.box, BRONZE, 0, 0.62, 0.15, 0, 0, 0.5, 0.55, 0.08, 0.08)]));
-    const arm = fuse([
-      stamp(UNIT.box, WOOD, 0, 0, 0.15, 0, 0, 0, 0.08, 0.08, 0.7),
-      stamp(UNIT.cone, METAL, 0, 0, 0.52, Math.PI / 2, 0, 0, 0.05, 0.16, 0.05),
-    ]);
+    aim.add(timber(PLANK, wood, 0, 0.42, 0, 0, 0, 0, 0.22, 0.1, 0.85));
+    aim.add(timber(PLANK, wood, -0.12, 0.55, 0, 0, 0, 0, 0.06, 0.22, 0.7));
+    aim.add(timber(PLANK, wood, 0.12, 0.55, 0, 0, 0, 0, 0.06, 0.22, 0.7));
+    aim.add(timber(POST, bronze, 0, 0.62, -0.05, 0, 0, Math.PI / 2, 0.05, 0.34, 0.05));
+    const arm = new THREE.Group();
+    arm.name = "arm";
+    arm.position.set(0, 0.66, 0.05);
+    arm.userData.rest = -0.22;
+    arm.add(timber(POST, wood, -0.24, 0.05, 0, 0, 0, 0.85, 0.035, 0.42, 0.035));
+    arm.add(timber(POST, wood, 0.24, 0.05, 0, 0, 0, -0.85, 0.035, 0.42, 0.035));
+    arm.add(timber(POST, metal, 0, 0.02, 0.22, Math.PI / 2, 0, 0, 0.025, 0.42, 0.025));
+    arm.add(timber(POST, bronze, 0, 0.02, 0.4, Math.PI / 2, 0, 0, 0.04, 0.12, 0.04));
+    aim.add(arm);
+    hangPennant(aim, color, 1.05);
+  } else if (kind === "ballista") {
+    aim.add(timber(PLANK, wood, 0, 0.42, 0, 0, 0, 0, 0.85, 0.1, 0.36));
+    aim.add(timber(PLANK, wood, 0, 0.5, 0, 0, 0, 0, 0.12, 0.12, 1.05));
+    aim.add(timber(POST, bronze, -0.28, 0.62, -0.05, 0, 0, Math.PI / 2, 0.07, 0.22, 0.07));
+    aim.add(timber(POST, bronze, 0.28, 0.62, -0.05, 0, 0, Math.PI / 2, 0.07, 0.22, 0.07));
+    const arm = new THREE.Group();
     arm.name = "arm";
     arm.position.set(0, 0.72, 0);
-    arm.userData.rest = -0.25;
-    g.add(arm);
-    g.add(pennant(color, 1.15));
-  } else if (kind === "ballista") {
-    g.add(
-      fuse([
-        ...plinth,
-        stamp(UNIT.box, WOOD, 0, 0.48, 0, 0, 0, 0, 0.7, 0.16, 0.28),
-        stamp(UNIT.box, WOOD, 0, 0.55, 0, 0, 0, 0, 0.16, 0.14, 1.05),
-      ]),
-    );
-    const arm = fuse([
-      stamp(UNIT.box, WOOD, -0.38, 0.05, 0, 0, 0, 0.9, 0.46, 0.08, 0.08),
-      stamp(UNIT.box, WOOD, 0.38, 0.05, 0, 0, 0, -0.9, 0.46, 0.08, 0.08),
-      stamp(UNIT.box, METAL, 0, 0, 0.2, 0, 0, 0, 0.08, 0.08, 0.85),
-    ]);
-    arm.name = "arm";
-    arm.position.set(0, 0.78, 0);
-    arm.userData.rest = -0.15;
-    g.add(arm);
-    g.add(pennant(color, 1.35));
+    arm.userData.rest = -0.12;
+    arm.add(timber(POST, wood, -0.42, 0.08, 0, 0, 0, 1.05, 0.04, 0.55, 0.04));
+    arm.add(timber(POST, wood, 0.42, 0.08, 0, 0, 0, -1.05, 0.04, 0.55, 0.04));
+    arm.add(timber(POST, metal, 0, 0.02, 0.28, Math.PI / 2, 0, 0, 0.035, 0.7, 0.035));
+    arm.add(timber(POST, bronze, 0, 0.02, 0.62, Math.PI / 2, 0, 0, 0.055, 0.16, 0.055));
+    aim.add(arm);
+    hangPennant(aim, color, 1.2);
   } else if (kind === "onager") {
-    g.add(
-      fuse([
-        ...plinth,
-        stamp(UNIT.box, WOOD, -0.28, 0.48, 0, 0, 0, 0, 0.1, 0.45, 0.7),
-        stamp(UNIT.box, WOOD, 0.28, 0.48, 0, 0, 0, 0, 0.1, 0.45, 0.7),
-        stamp(UNIT.box, WOOD, 0, 0.42, -0.28, 0, 0, 0, 0.5, 0.1, 0.1),
-        stamp(UNIT.sph, STONE2, 0.45, 0.32, 0.2, 0, 0, 0, 0.12, 0.12, 0.12),
-      ]),
-    );
-    const arm = fuse([
-      stamp(UNIT.box, WOOD, 0, 0.35, 0, 0, 0, 0, 0.1, 0.75, 0.1),
-      stamp(UNIT.box, WOOD, 0, 0.7, 0.1, 0, 0, 0, 0.22, 0.1, 0.22),
-    ]);
+    aim.add(timber(PLANK, wood, -0.28, 0.55, 0, 0, 0, 0, 0.08, 0.55, 0.72));
+    aim.add(timber(PLANK, wood, 0.28, 0.55, 0, 0, 0, 0, 0.08, 0.55, 0.72));
+    aim.add(timber(PLANK, wood, 0, 0.4, -0.28, 0, 0, 0, 0.62, 0.08, 0.08));
+    aim.add(timber(POST, bronze, 0, 0.72, -0.02, 0, 0, Math.PI / 2, 0.05, 0.5, 0.05));
+    const arm = new THREE.Group();
     arm.name = "arm";
-    arm.position.set(0, 0.55, -0.05);
+    arm.position.set(0, 0.72, -0.02);
     arm.userData.rest = -0.95;
     arm.rotation.x = -0.95;
-    g.add(arm);
-    g.add(pennant(color, 1.25));
+    arm.add(timber(PLANK, wood, 0, 0.38, 0, 0, 0, 0, 0.08, 0.78, 0.08));
+    arm.add(timber(PLANK, wood, 0, 0.74, 0.08, 0, 0, 0, 0.2, 0.08, 0.2));
+    arm.add(timber(new THREE.SphereGeometry(0.1, 8, 6), paint(STONE2, 0.95, 0.02), 0, 0.74, 0.12));
+    aim.add(arm);
+    hangPennant(aim, color, 1.15, -0.35);
   } else if (kind === "cohort") {
-    const men: THREE.BufferGeometry[] = [];
-    for (const x of [-0.38, 0, 0.38]) {
-      for (const part of human({
+    for (const x of [-0.34, 0, 0.34]) {
+      const man = makePerson({
         cloth: TUNIC,
         hair: "#2a211c",
         weapon: "spear",
@@ -349,55 +254,67 @@ export function makeTower(kind: TowerKind) {
         helm: true,
         crest: x === 0 ? "#e3c16e" : TUNIC,
         metal: METAL,
-        k: 0.72,
-      })) {
-        part.translate(x, 0.28, 0);
-        men.push(part);
-      }
+        k: 0.68,
+        name: "soldier",
+      });
+      man.position.set(x, 0.2, 0);
+      aim.add(man);
     }
-    g.add(fuse([...plinth, ...men]));
-    g.add(pennant(color, 1.55));
+    hangPennant(aim, color, 1.45);
   } else if (kind === "naphtha") {
-    g.add(
-      fuse([
-        ...plinth,
-        stamp(UNIT.cyl, WOOD, -0.28, 0.7, -0.28, 0, 0, 0, 0.08, 0.9, 0.08),
-        stamp(UNIT.cyl, WOOD, 0.28, 0.7, -0.28, 0, 0, 0, 0.08, 0.9, 0.08),
-        stamp(UNIT.cyl, WOOD, -0.28, 0.7, 0.28, 0, 0, 0, 0.08, 0.9, 0.08),
-        stamp(UNIT.cyl, WOOD, 0.28, 0.7, 0.28, 0, 0, 0, 0.08, 0.9, 0.08),
-        stamp(UNIT.cyl, WOOD, 0, 1.15, 0, 0, 0, 0, 0.42, 0.16, 0.42),
-        stamp(UNIT.cyl, BRONZE, 0, 1.32, 0, 0, 0, 0, 0.28, 0.16, 0.28),
-      ]),
-    );
-    const flame = new THREE.Mesh(UNIT.cone, FLAME);
-    flame.name = "flame";
-    flame.position.set(0, 1.62, 0);
-    flame.scale.set(0.16, 0.32, 0.16);
-    flame.castShadow = false;
-    g.add(flame);
-    g.add(pennant(color, 1.7));
+    for (const [x, z] of [
+      [-0.28, -0.28],
+      [0.28, -0.28],
+      [-0.28, 0.28],
+      [0.28, 0.28],
+    ] as const) {
+      aim.add(timber(POST, wood, x, 0.7, z, 0, 0, 0, 0.045, 0.95, 0.045));
+    }
+    aim.add(timber(POST, wood, 0, 1.12, 0, 0, 0, 0, 0.38, 0.08, 0.38));
+    aim.add(timber(CAULDRON, bronze, 0, 1.18, 0));
+    const flame = makeFlame(0.18, 0.36, 0.18);
+    flame.position.set(0, 1.52, 0);
+    aim.add(flame);
+    const tender = makePerson({
+      cloth: "#6a3a28",
+      hair: "#2a211c",
+      weapon: "none",
+      k: 0.55,
+      name: "soldier",
+    });
+    tender.position.set(0.42, 0.2, 0.05);
+    aim.add(tender);
+    hangPennant(aim, color, 1.7);
   } else {
-    g.add(
-      fuse([
-        ...plinth,
-        stamp(UNIT.cyl, WOOD, -0.32, 0.85, -0.32, 0, 0, 0, 0.07, 1.2, 0.07),
-        stamp(UNIT.cyl, WOOD, 0.32, 0.85, -0.32, 0, 0, 0, 0.07, 1.2, 0.07),
-        stamp(UNIT.cyl, WOOD, -0.32, 0.85, 0.32, 0, 0, 0, 0.07, 1.2, 0.07),
-        stamp(UNIT.cyl, WOOD, 0.32, 0.85, 0.32, 0, 0, 0, 0.07, 1.2, 0.07),
-        stamp(UNIT.box, WOOD, 0, 1.4, 0, 0, 0, 0, 0.8, 0.08, 0.8),
-        stamp(UNIT.cone, "#6a3a28", 0, 1.75, 0, 0, 0, 0, 0.55, 0.4, 0.55),
-        ...human({ cloth: TUNIC, hair: "#222", weapon: "bow", helm: true, k: 0.55 }).map((part) => {
-          part.translate(-0.15, 1.45, 0);
-          return part;
-        }),
-        ...human({ cloth: "#8ea36a", hair: "#222", weapon: "bow", helm: true, k: 0.55 }).map((part) => {
-          part.translate(0.18, 1.45, 0.05);
-          return part;
-        }),
-      ]),
-    );
-    g.add(pennant(color, 2.15));
+    for (const [x, z] of [
+      [-0.32, -0.32],
+      [0.32, -0.32],
+      [-0.32, 0.32],
+      [0.32, 0.32],
+    ] as const) {
+      aim.add(timber(POST, wood, x, 0.85, z, 0, 0, 0, 0.045, 1.25, 0.045));
+    }
+    aim.add(timber(PLANK, wood, 0, 1.42, 0, 0, 0, 0, 0.82, 0.08, 0.82));
+    aim.add(timber(new THREE.ConeGeometry(0.48, 0.42, 8), paint("#6a3a28", 0.86, 0.03), 0, 1.68, 0));
+    for (const [x, z, tunic] of [
+      [-0.16, 0, TUNIC],
+      [0.16, 0.04, "#8ea36a"],
+    ] as const) {
+      const man = makePerson({
+        cloth: tunic,
+        hair: "#222018",
+        weapon: "bow",
+        helm: true,
+        metal: METAL,
+        k: 0.5,
+        name: "soldier",
+      });
+      man.position.set(x, 1.46, z);
+      aim.add(man);
+    }
+    hangPennant(aim, color, 2.05);
   }
+
   g.traverse((obj) => {
     if (obj instanceof THREE.Mesh && obj.name !== "flame") obj.castShadow = true;
   });
@@ -406,24 +323,39 @@ export function makeTower(kind: TowerKind) {
 
 export function makeProjectile(visual: "arrow" | "bolt" | "pilum" | "stone" | "pot") {
   if (visual === "stone") {
-    return fuse([stamp(UNIT.sph, STONE2, 0, 0, 0, 0, 0, 0, 0.16, 0.14, 0.16)]);
+    const rock = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), paint(STONE2, 0.95, 0.02));
+    rock.scale.set(1, 0.82, 1);
+    rock.castShadow = true;
+    return rock;
   }
   if (visual === "pot") {
     const g = new THREE.Group();
-    g.add(fuse([stamp(UNIT.cyl, "#6a3a28", 0, 0, 0, 0, 0, 0, 0.1, 0.14, 0.1), stamp(UNIT.sph, "#c4552a", 0, 0.08, 0, 0, 0, 0, 0.08, 0.08, 0.08)]));
-    const flame = new THREE.Mesh(UNIT.cone, FLAME);
-    flame.scale.set(0.08, 0.16, 0.08);
-    flame.position.y = 0.16;
+    const pot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), paint("#6a3a28", 0.8, 0.05));
+    pot.scale.set(1, 0.85, 1);
+    pot.castShadow = true;
+    g.add(pot);
+    const flame = makeFlame(0.09, 0.18, 0.09);
+    flame.position.y = 0.1;
     g.add(flame);
     return g;
   }
-  const len = visual === "bolt" ? 0.55 : visual === "pilum" ? 0.48 : 0.36;
-  const thick = visual === "bolt" ? 0.05 : 0.025;
-  const shaft = visual === "pilum" ? WOOD : METAL;
-  return fuse([
-    stamp(UNIT.box, shaft, 0, 0, 0, 0, 0, 0, thick, thick, len),
-    stamp(UNIT.cone, "#eee6d6", 0, 0, len * 0.55, Math.PI / 2, 0, 0, thick * 1.6, 0.12, thick * 1.6),
-  ]);
+  const len = visual === "bolt" ? 0.62 : visual === "pilum" ? 0.5 : 0.4;
+  const thick = visual === "bolt" ? 0.028 : 0.012;
+  const group = new THREE.Group();
+  const shaftMat = paint(visual === "pilum" ? WOOD : METAL, visual === "pilum" ? 0.8 : 0.35, visual === "pilum" ? 0.05 : 0.7);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(thick, thick, len, 6), shaftMat);
+  shaft.rotation.x = Math.PI / 2;
+  shaft.castShadow = true;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(thick * 2.1, 0.12, 6), paint("#eee6d6", 0.35, 0.55));
+  head.rotation.x = Math.PI / 2;
+  head.position.z = len * 0.5;
+  group.add(shaft, head);
+  if (visual !== "pilum") {
+    const fletch = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.08), paint("#9e2d2a", 0.7, 0.02));
+    fletch.position.z = -len * 0.42;
+    group.add(fletch);
+  }
+  return group;
 }
 
 export function makePad() {
@@ -452,20 +384,9 @@ export function makeFort() {
   ]);
   tent.name = "tent";
   root.add(tent);
-  const eagle = new THREE.Mesh(
-    mergeGeometries(
-      [
-        stamp(UNIT.box, "#e6c36a", 0, 0.15, 0, 0, 0, 0, 0.22, 0.08, 0.08),
-        stamp(UNIT.cone, "#e6c36a", -0.12, 0.12, 0.04, 0, 0, 0.8, 0.1, 0.16, 0.04),
-        stamp(UNIT.cone, "#e6c36a", 0.12, 0.12, 0.04, 0, 0, -0.8, 0.1, 0.16, 0.04),
-      ],
-      false,
-    )!,
-    GOLD,
-  );
-  eagle.position.set(0.55, 1.28, 1.7);
-  eagle.castShadow = true;
-  eagle.name = "eagle";
+  const eagle = makeEagle();
+  eagle.position.set(0.55, 1.32, 1.7);
+  eagle.scale.setScalar(0.85);
   root.add(eagle);
 
   const posts: THREE.BufferGeometry[] = [];
@@ -513,17 +434,22 @@ export function makeFort() {
       stamp(UNIT.box, STONE, -1.15, 0.95, 0.05, 0, 0, 0, 0.7, 1.5, 0.7),
       stamp(UNIT.box, STONE, 1.15, 0.95, 0.05, 0, 0, 0, 0.7, 1.5, 0.7),
       stamp(UNIT.box, STONE2, 0, 1.55, 0.05, 0, 0, 0, 1.5, 0.28, 0.62),
-      stamp(UNIT.box, "#5a3822", 0, 0.55, 0.05, 0, 0, 0, 0.9, 0.85, 0.12),
-      stamp(UNIT.box, BRONZE, 0, 0.7, 0.14, 0, 0, 0, 0.16, 0.16, 0.06),
+      stamp(UNIT.box, "#5a3822", -0.28, 0.55, 0.08, 0, 0, 0, 0.16, 0.9, 0.08),
+      stamp(UNIT.box, "#6a4530", -0.08, 0.55, 0.08, 0, 0, 0, 0.16, 0.9, 0.08),
+      stamp(UNIT.box, "#5a3822", 0.12, 0.55, 0.08, 0, 0, 0, 0.16, 0.9, 0.08),
+      stamp(UNIT.box, "#6a4530", 0.3, 0.55, 0.08, 0, 0, 0, 0.16, 0.9, 0.08),
+      stamp(UNIT.box, BRONZE, 0, 0.85, 0.14, 0, 0, 0, 0.95, 0.06, 0.06),
+      stamp(UNIT.box, BRONZE, 0, 0.42, 0.14, 0, 0, 0, 0.95, 0.06, 0.06),
     ]),
   );
   for (const x of [-1.15, 1.15]) {
-    const flame = new THREE.Mesh(UNIT.cone, FLAME);
-    flame.name = "flame";
-    flame.position.set(x, 1.85, 0.05);
-    flame.scale.set(0.12, 0.26, 0.12);
+    const flame = makeFlame(0.14, 0.3, 0.14);
+    flame.position.set(x, 1.82, 0.05);
     gate.add(flame);
   }
+  const gateFlag = makePennant(TUNIC);
+  gateFlag.position.set(0.15, 1.72, 0.2);
+  gate.add(gateFlag);
   root.add(gate);
 
   const principia = new THREE.Group();
@@ -531,17 +457,33 @@ export function makeFort() {
   principia.add(
     fuse([
       stamp(UNIT.box, STONE, 0, 0.7, 1.7, 0, 0, 0, 1.8, 0.9, 1.3),
-      stamp(UNIT.box, TUNIC, 0, 1.25, 1.7, 0, 0.2, 0, 1.9, 0.12, 1.45),
-      stamp(UNIT.box, "#f3e6d0", 0, 0.85, 1.1, 0, 0, 0, 0.55, 0.7, 0.08),
-      stamp(UNIT.cyl, BRONZE, 0, 1.15, 1.05, 0, 0, 0, 0.05, 1.5, 0.05),
+      stamp(UNIT.box, TUNIC, 0, 1.28, 1.7, 0, 0.15, 0, 2.05, 0.1, 1.55),
+      stamp(UNIT.box, "#f3e6d0", 0, 0.85, 1.08, 0, 0, 0, 0.5, 0.72, 0.06),
+      stamp(UNIT.cyl, STONE2, -0.62, 0.72, 1.08, 0, 0, 0, 0.07, 1.15, 0.07),
+      stamp(UNIT.cyl, STONE2, -0.22, 0.72, 1.08, 0, 0, 0, 0.07, 1.15, 0.07),
+      stamp(UNIT.cyl, STONE2, 0.22, 0.72, 1.08, 0, 0, 0, 0.07, 1.15, 0.07),
+      stamp(UNIT.cyl, STONE2, 0.62, 0.72, 1.08, 0, 0, 0, 0.07, 1.15, 0.07),
+      stamp(UNIT.cyl, BRONZE, 0, 1.55, 1.05, 0, 0, 0, 0.035, 0.7, 0.035),
     ]),
   );
-  const aquila = new THREE.Mesh(UNIT.sph, GOLD);
-  aquila.scale.set(0.16, 0.12, 0.18);
+  const aquila = makeEagle();
   aquila.position.set(0, 1.95, 1.05);
-  aquila.name = "eagle";
+  aquila.scale.setScalar(0.7);
   principia.add(aquila);
   root.add(principia);
+
+  for (const [x, z, ry] of [
+    [-2.4, 0.05, 0],
+    [2.4, 0.05, 0],
+    [-3.15, 0.9, Math.PI / 2],
+    [3.15, 1.7, -Math.PI / 2],
+  ] as const) {
+    const shield = makeShield(TUNIC);
+    shield.position.set(x, 0.85, z);
+    shield.rotation.y = ry;
+    shield.scale.setScalar(0.55);
+    curtain.add(shield);
+  }
 
   const hit = new THREE.Mesh(
     new THREE.CylinderGeometry(1.35, 1.35, 1.6, 8),
@@ -585,7 +527,7 @@ export function makeGround(path: Path) {
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }),
   );
   mesh.receiveShadow = true;
   mesh.name = "ground";
@@ -631,7 +573,7 @@ export function makeRoad(path: Path) {
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }),
   );
   mesh.receiveShadow = true;
   mesh.name = "road";
@@ -642,18 +584,45 @@ export function makeRoad(path: Path) {
 }
 
 export function makeRiver() {
+  const geo = new THREE.PlaneGeometry(4.6, 38, 18, 48);
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(4.2, 36),
-    new THREE.MeshStandardMaterial({
-      color: "#1d6770",
-      roughness: 0.18,
-      metalness: 0.42,
+    geo,
+    new THREE.ShaderMaterial({
       transparent: true,
-      opacity: 0.9,
+      uniforms: { uTime: riverTime },
+      vertexShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying float vCrest;
+        void main() {
+          vUv = uv;
+          vec3 p = position;
+          float crest = sin(p.y * 0.55 + uTime * 1.35) * 0.07 + sin(p.x * 1.8 + uTime * 0.8) * 0.035;
+          p.z += crest;
+          vCrest = crest;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        uniform float uTime;
+        varying vec2 vUv;
+        varying float vCrest;
+        void main() {
+          vec3 deep = vec3(0.07, 0.28, 0.32);
+          vec3 mid = vec3(0.16, 0.52, 0.55);
+          vec3 foam = vec3(0.78, 0.88, 0.84);
+          float rip = sin(vUv.y * 46.0 + uTime * 1.7) * sin(vUv.x * 16.0 - uTime * 0.6);
+          vec3 col = mix(deep, mid, clamp(vUv.x + rip * 0.18, 0.0, 1.0));
+          col = mix(col, foam, smoothstep(0.04, 0.09, vCrest));
+          float bank = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.9, vUv.x);
+          gl_FragColor = vec4(col, 0.55 + bank * 0.35);
+        }
+      `,
     }),
   );
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(-13.7, 0.04, -1);
+  mesh.position.set(-13.7, 0.05, -1);
   mesh.receiveShadow = true;
   mesh.name = "river";
   return mesh;
@@ -713,9 +682,11 @@ export function makeEntry() {
       stamp(UNIT.cyl, WOOD, -0.85, 0.7, 0, 0, 0, 0, 0.08, 1.3, 0.08),
       stamp(UNIT.cyl, WOOD, 0.85, 0.7, 0, 0, 0, 0, 0.08, 1.3, 0.08),
       stamp(UNIT.box, WOOD, 0, 1.35, 0, 0, 0, 0, 1.9, 0.1, 0.1),
-      stamp(UNIT.box, TUNIC, 0, 1.05, 0, 0, 0, 0, 0.7, 0.4, 0.04),
     ]),
   );
+  const flag = makePennant(TUNIC);
+  flag.position.set(0.05, 1.15, 0.06);
+  g.add(flag);
   return g;
 }
 
@@ -723,24 +694,45 @@ export function makeScenery(path: Path) {
   const root = new THREE.Group();
   const rng = mulberry32(11);
   const fort = layout.fort;
+  const cone = new THREE.ConeGeometry(1, 1, 10);
+  const cyl = new THREE.CylinderGeometry(1, 1, 1, 8);
+  const blob = new THREE.SphereGeometry(1, 8, 6);
   const cypress = fuse([
-    stamp(UNIT.cyl, "#6a4a30", 0, 0.25, 0, 0, 0, 0, 0.08, 0.5, 0.08),
-    stamp(UNIT.cone, OLIVE2, 0, 1.15, 0, 0, 0, 0, 0.38, 1.5, 0.38),
-    stamp(UNIT.cone, OLIVE, 0, 1.7, 0, 0, 0, 0, 0.22, 0.7, 0.22),
+    stamp(cyl, "#6a4a30", 0, 0.28, 0, 0, 0, 0, 0.07, 0.55, 0.07),
+    stamp(cone, OLIVE2, 0, 0.85, 0, 0, 0, 0, 0.42, 1.05, 0.42),
+    stamp(cone, OLIVE, 0, 1.35, 0, 0, 0.2, 0, 0.3, 0.9, 0.3),
+    stamp(cone, "#8eaa5c", 0, 1.8, 0, 0, 0, 0, 0.18, 0.65, 0.18),
   ]);
   const olive = fuse([
-    stamp(UNIT.cyl, "#6a4a30", 0, 0.35, 0, 0, 0, 0, 0.1, 0.7, 0.1),
-    stamp(UNIT.ico, OLIVE, 0, 1.05, 0, 0, 0, 0, 0.55, 0.38, 0.55),
-    stamp(UNIT.ico, OLIVE2, 0.28, 0.95, 0.1, 0, 0.4, 0, 0.32, 0.26, 0.32),
+    stamp(cyl, "#6a4a30", 0, 0.32, 0, 0, 0.3, 0, 0.08, 0.65, 0.1),
+    stamp(blob, OLIVE, 0, 1.05, 0, 0, 0, 0, 0.48, 0.34, 0.48),
+    stamp(blob, OLIVE2, 0.28, 0.95, 0.12, 0, 0.4, 0, 0.3, 0.24, 0.3),
+    stamp(blob, "#8eaa5c", -0.22, 0.98, -0.08, 0, 0.8, 0, 0.26, 0.22, 0.26),
   ]);
-  const rock = fuse([stamp(UNIT.dod, STONE2, 0, 0.18, 0, 0.2, 0.4, 0, 0.35, 0.22, 0.28)]);
+  const rock = fuse([
+    stamp(UNIT.dod, STONE2, 0, 0.16, 0, 0.2, 0.4, 0, 0.32, 0.2, 0.26),
+    stamp(UNIT.dod, STONE, 0.16, 0.12, 0.08, 0.5, 0.2, 0.3, 0.18, 0.14, 0.16),
+  ]);
   const flower = fuse([
-    stamp(UNIT.cyl, "#d7d0a4", 0, 0.12, 0, 0, 0, 0, 0.02, 0.22, 0.02),
-    stamp(UNIT.sph, "#f0e2a0", 0, 0.26, 0, 0, 0, 0, 0.06, 0.06, 0.06),
+    stamp(cyl, "#6e8a42", 0, 0.1, 0, 0, 0, 0, 0.015, 0.2, 0.015),
+    stamp(blob, "#f0e2a0", 0, 0.24, 0, 0, 0, 0, 0.045, 0.045, 0.045),
+    stamp(blob, "#e7c49a", 0.05, 0.23, 0, 0, 0, 0, 0.03, 0.03, 0.03),
+    stamp(blob, "#f4efe6", -0.04, 0.23, 0.02, 0, 0, 0, 0.028, 0.028, 0.028),
+  ]);
+  const grass = fuse([
+    stamp(cone, OLIVE, 0, 0.16, 0, 0, 0, 0.2, 0.05, 0.32, 0.05),
+    stamp(cone, OLIVE2, 0.05, 0.14, 0.02, 0, 0, -0.3, 0.04, 0.26, 0.04),
+    stamp(cone, "#8eaa5c", -0.04, 0.13, -0.02, 0.1, 0, 0.4, 0.035, 0.24, 0.035),
   ]);
 
-  const place = (proto: THREE.Mesh, count: number, minDist: number, scale: [number, number]) => {
-    const inst = new THREE.InstancedMesh(proto.geometry, BODY, count);
+  const place = (
+    proto: THREE.Mesh,
+    material: THREE.Material,
+    count: number,
+    minDist: number,
+    scale: [number, number],
+  ) => {
+    const inst = new THREE.InstancedMesh(proto.geometry, material, count);
     inst.castShadow = true;
     inst.receiveShadow = false;
     const m = new THREE.Matrix4();
@@ -767,10 +759,11 @@ export function makeScenery(path: Path) {
     else inst.geometry.dispose();
   };
 
-  place(cypress, 26, 2.8, [0.9, 1.55]);
-  place(olive, 18, 2.9, [0.85, 1.45]);
-  place(rock, 22, 1.7, [0.55, 1.6]);
-  place(flower, 46, 1.35, [0.7, 1.25]);
+  place(cypress, FOLIAGE, 26, 2.8, [0.9, 1.55]);
+  place(olive, FOLIAGE, 18, 2.9, [0.85, 1.45]);
+  place(rock, SCENERY, 22, 1.7, [0.55, 1.6]);
+  place(flower, FOLIAGE, 40, 1.35, [0.7, 1.25]);
+  place(grass, FOLIAGE, 70, 1.15, [0.7, 1.4]);
 
   const hills: THREE.BufferGeometry[] = [];
   const ring = [
@@ -785,9 +778,9 @@ export function makeScenery(path: Path) {
     [-18, 8, 2.5, "#70884e"],
   ] as const;
   for (const [x, z, s, hex] of ring) {
-    hills.push(stamp(UNIT.cone, hex, x, s * 0.35, z, 0, 0, 0, s * 1.8, s, s * 1.5));
+    hills.push(stamp(cone, hex, x, s * 0.35, z, 0, 0, 0, s * 1.8, s, s * 1.5));
   }
-  const hillMesh = fuse(hills, "hills");
+  const hillMesh = fuse(hills, "hills", SCENERY);
   hillMesh.receiveShadow = true;
   root.add(hillMesh);
   return root;

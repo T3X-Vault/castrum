@@ -11,6 +11,7 @@ import {
   Target,
   Volume2,
   VolumeX,
+  Vibrate,
   X,
   Zap,
 } from "lucide-react";
@@ -97,6 +98,10 @@ export function Castrum() {
               <span className="gate-fill" style={{ width: `${gatePct}%` }} />
             </div>
           </div>
+          <div className="stat walls">
+            <span>Walls</span>
+            <strong>{hud.masonryName}</strong>
+          </div>
           <div className="stat">
             <span>Wave</span>
             <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
@@ -137,6 +142,14 @@ export function Castrum() {
             >
               {hud.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
+            <button
+              className="icon-btn"
+              data-on={hud.shakeOn ? "true" : "false"}
+              onClick={() => press({ t: "shake" })}
+              aria-label={hud.shakeOn ? "Turn screen shake off" : "Turn screen shake on"}
+            >
+              <Vibrate size={18} />
+            </button>
             <button className="icon-btn" onClick={() => press({ t: "manual", open: true })} aria-label="Field manual">
               <BookOpen size={18} />
             </button>
@@ -147,7 +160,11 @@ export function Castrum() {
       <div className="stage">
         <canvas className="gl" aria-label="Roman battlefield" />
         <canvas className="fx" aria-hidden="true" />
-        {hud.phase !== "menu" && <div className="banner">{hud.banner}</div>}
+        {hud.phase !== "menu" && (
+          <div className="banner" data-hot={hud.fighting ? "true" : "false"}>
+            {hud.banner}
+          </div>
+        )}
         {bootError && <p className="boot-error">{bootError}</p>}
 
         {hud.phase === "menu" && (
