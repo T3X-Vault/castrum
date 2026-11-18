@@ -16,6 +16,7 @@ import {
   type TargetMode,
   type TowerKind,
 } from "./balance";
+import { CHAPTER_WAVES, zoneHardness, zoneWave } from "./campaign";
 
 export interface Enemy {
   id: number;
@@ -118,17 +119,19 @@ export interface GameState {
   waveT: number;
   hpScale: number;
   speedScale: number;
+  chapter: number;
   nextId: number;
   seed: number;
   time: number;
 }
 
-export function createState(): GameState {
+export function createState(chapter = 1): GameState {
+  const zone = Math.min(24, Math.max(1, chapter));
   return {
-    gold: START_GOLD,
+    gold: START_GOLD + (zone - 1) * 10,
     earned: 0,
-    fort: START_FORT,
-    fortMax: START_FORT,
+    fort: START_FORT + Math.floor((zone - 1) / 3),
+    fortMax: START_FORT + Math.floor((zone - 1) / 3),
     wave: 0,
     cleared: 0,
     fighting: false,
@@ -145,6 +148,7 @@ export function createState(): GameState {
     waveT: 0,
     hpScale: 1,
     speedScale: 1,
+    chapter: zone,
     nextId: 1,
     seed: 0x9e3779b9,
     time: 0,
@@ -332,9 +336,10 @@ export function buyMasonry(state: GameState): { ok: boolean; text?: string } {
 export function startWave(state: GameState): { ok: boolean; text?: string } {
   if (state.outcome !== "play") return { ok: false };
   if (state.fighting) return { ok: false, text: "A host is already on the road." };
-  if (!state.endless && state.wave >= WAVE_COUNT) return { ok: false };
+  const cap = state.endless ? Number.POSITIVE_INFINITY : state.chapter ? CHAPTER_WAVES : WAVE_COUNT;
+  if (state.wave >= cap) return { ok: false };
   const next = state.wave + 1;
-  const wave = makeWave(next);
+  const wave = makeWave(state.chapter ? zoneWave(state.chapter, next) : next);
   const schedule: { t: number; kind: EnemyKind }[] = [];
   for (const g of wave.groups) {
     for (let i = 0; i < g.count; i++) {
@@ -346,8 +351,9 @@ export function startWave(state: GameState): { ok: boolean; text?: string } {
   state.schedule = schedule;
   state.spawnCursor = 0;
   state.waveT = 0;
-  state.hpScale = wave.hpScale;
-  state.speedScale = wave.speedScale;
+  const hard = state.chapter ? zoneHardness(state.chapter) : 1;
+  state.hpScale = wave.hpScale * hard;
+  state.speedScale = Math.min(1.4, wave.speedScale * (1 + (state.chapter ? (state.chapter - 1) * 0.01 : 0)));
   state.fighting = true;
   return { ok: true };
 }
@@ -642,7 +648,8 @@ export function step(state: GameState, dt: number): FxEvent[] {
     state.gold += bounty;
     state.earned += bounty;
     events.push({ type: "clear", wave: state.wave, bounty });
-    if (!state.endless && state.wave >= WAVE_COUNT) {
+    const cap = state.chapter ? CHAPTER_WAVES : WAVE_COUNT;
+    if (!state.endless && state.wave >= cap) {
       state.outcome = "victory";
       events.push({ type: "victory" });
     }

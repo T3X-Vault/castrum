@@ -20,6 +20,7 @@ import {
   type TowerKind,
 } from "./balance";
 import { drain, type Command } from "./commands";
+import { CHAPTER_WAVES, frontier, holdZone, loseZone, zoneById } from "./campaign";
 import { clearRun, loadRun, noteWaveCleared, readMerit, readSlot, saveSlot } from "./records";
 import { patchHud, previewLine, type Phase } from "./hud";
 import { makeEnemy, poseRig, tickFigures } from "./figures";
@@ -330,7 +331,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   function publish() {
     const nextIndex = !state || state.fighting ? state?.wave ?? 1 : state.wave + 1;
-    const quiet = state && !state.endless && state.wave >= WAVE_COUNT && !state.fighting;
+    const cap = state?.chapter ? CHAPTER_WAVES : WAVE_COUNT;
+    const quiet = state && !state.endless && state.wave >= cap && !state.fighting;
+    const zone = zoneById(state?.chapter ?? frontier());
     const names = Object.fromEntries(ENEMY_KINDS.map((kind) => [kind, ENEMIES[kind].name])) as Record<
       (typeof ENEMY_KINDS)[number],
       string
@@ -389,6 +392,8 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       merit: merit.percent,
       meritReady: merit.percent >= 100 && !merit.claimed,
       reel: reelCaption(reel),
+      chapter: state?.chapter ?? zone.id,
+      chapterName: zone.name,
     });
   }
 
@@ -467,10 +472,11 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       state.outcome = "defeat";
       state.fighting = false;
       phase = "defeat";
+      const fell = loseZone(state.chapter);
       clearRun();
       playSound("lose");
       noteBest();
-      say("The legion yields.");
+      say(fell ? `${zoneById(fell).name} is lost.` : "The legion yields.");
       publish();
       return;
     }
@@ -492,10 +498,13 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       publish();
       return;
     }
-    if (command.t === "start" || command.t === "again") {
+    if (command.t === "start" || command.t === "again" || command.t === "march") {
+      const chapter =
+        command.t === "march" ? command.chapter : command.t === "again" ? (state?.chapter ?? frontier()) : frontier();
+      const zone = zoneById(chapter);
       clearRun();
       clearPlay();
-      state = createState();
+      state = createState(chapter);
       phase = "playing";
       selected = null;
       armed = null;
@@ -505,7 +514,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       intro = reduced ? 1 : 0;
       waveTitle = "";
       resetEye();
-      say("The ford is yours. Set an engine.");
+      say(`${zone.name}. Set an engine.`);
       publish();
       return;
     }
@@ -904,16 +913,18 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         say(`The host breaks. +${ev.bounty} denarii`, 2.4);
       } else if (ev.type === "victory") {
         phase = "victory";
+        if (state) holdZone(state.chapter);
         clearRun();
         playSound("win");
         noteBest();
-        say("The ford holds.");
+        say(state ? `${zoneById(state.chapter).name} is held.` : "The ford holds.");
       } else if (ev.type === "defeat") {
         phase = "defeat";
+        const fell = state ? loseZone(state.chapter) : null;
         clearRun();
         playSound("lose");
         noteBest();
-        say("The gate is broken.");
+        say(fell ? `${zoneById(fell).name} is lost.` : "The gate is broken.");
       }
     }
   }

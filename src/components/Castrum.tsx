@@ -23,12 +23,53 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, WAVE_COUNT, type TargetMode, type TowerKind } from "@/game/balance";
+import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, type TargetMode, type TowerKind } from "@/game/balance";
+import {
+  CHAPTER_COUNT,
+  CHAPTER_WAVES,
+  ZONES,
+  frontier,
+  provinceHeld,
+  readHeld,
+  zoneById,
+  zoneHardness,
+} from "@/game/campaign";
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
 import { deleteSlot, hasRun, listSlots, loadScores, rememberScore, SLOT_IDS, type ScoreRow, type SlotRecord } from "@/game/records";
 import { WalletDock } from "@/components/WalletDock";
+
+function ZoneBrief({
+  zone,
+  held,
+  edge,
+  onMarch,
+}: {
+  zone: { id: number; name: string; blurb: string };
+  held: boolean;
+  edge: number;
+  onMarch: (id: number) => void;
+}) {
+  const canMarch = zone.id === edge && !provinceHeld();
+  return (
+    <div className="zone-brief">
+      <p className="latin">
+        Zone {zone.id} · {zone.name}
+      </p>
+      <p>{zone.blurb}</p>
+      <p className="wallet-note">
+        {held ? "Held." : zone.id === edge ? "The march." : "Beyond the march."} Host {Math.round(zoneHardness(zone.id) * 100)}
+        %.
+      </p>
+      {canMarch && (
+        <button className="primary" type="button" onClick={() => onMarch(zone.id)}>
+          March
+        </button>
+      )}
+    </div>
+  );
+}
 
 function XMark() {
   return (
@@ -134,6 +175,9 @@ export function Castrum() {
   const [slotName, setSlotName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [held, setHeld] = useState<number[]>([]);
+  const [picked, setPicked] = useState(1);
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
@@ -141,6 +185,8 @@ export function Castrum() {
 
   useEffect(() => {
     setScores(loadScores());
+    setHeld(readHeld());
+    setPicked(frontier());
     setSavedRun(hasRun());
     if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
   }, [hud.phase]);
@@ -243,8 +289,8 @@ export function Castrum() {
               </span>
             </span>
             <span className="readout-bit">
-              <span>Wave</span>
-              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/${WAVE_COUNT}`}</strong>
+              <span>{hud.chapter ? `Zone ${hud.chapter}` : "Wave"}</span>
+              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/${CHAPTER_WAVES}`}</strong>
             </span>
             <span className="readout-bit merit" title="Cleared waves fill this across a few games. 100% is 1 T3X.">
               <span>T3X</span>
@@ -411,8 +457,24 @@ export function Castrum() {
                 <p className="lede">Hold the ford.</p>
               </div>
               <div className="menu-actions">
-                <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
-                  Start game
+                <button
+                  className="primary"
+                  data-testid="begin"
+                  disabled={provinceHeld()}
+                  onClick={() => press({ t: "march", chapter: frontier() })}
+                >
+                  {provinceHeld() ? "Province held" : `March · ${zoneById(frontier()).name}`}
+                </button>
+                <button
+                  className="ghost"
+                  data-testid="map"
+                  onClick={() => {
+                    setHeld(readHeld());
+                    setPicked(frontier());
+                    setMapOpen(true);
+                  }}
+                >
+                  Map · {readHeld().length}/{CHAPTER_COUNT}
                 </button>
                 {savedRun && (
                   <button className="ghost" data-testid="continue" onClick={() => press({ t: "continue" })}>
@@ -445,24 +507,77 @@ export function Castrum() {
               </div>
               <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
               {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
-              {scores.length > 0 && (
-                <>
-                  <p className="board-label">Scores</p>
-                  <ol className="board">
-                    {scores.slice(0, 5).map((row) => (
-                      <li key={`${row.at}-${row.name}`}>
-                        <span>{row.name}</span>
-                        <span>
-                          {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </>
+              <p className="board-label">Scores</p>
+              {scores.length === 0 ? (
+                <p className="wallet-note">No scores on this device yet.</p>
+              ) : (
+                <ol className="board" data-testid="scores">
+                  {scores.slice(0, 5).map((row) => (
+                    <li key={`${row.at}-${row.name}`}>
+                      <span>{row.name}</span>
+                      <span>
+                        {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               )}
               <p className="credit">Created by Futuret3ch</p>
             </section>
           </>
+        )}
+
+        {mapOpen && (
+          <div className="wallet-back" role="presentation" onClick={() => setMapOpen(false)}>
+            <div
+              className="wallet-sheet zone-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="World map"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="eyebrow">Twenty-four zones</p>
+              <h2>The province</h2>
+              <p>Beat a zone and it stays yours. Lose the march and the ground behind you falls. Each zone is a harder host.</p>
+              <div className="road" data-testid="zone-map">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline points={ZONES.map((zone) => `${zone.x},${zone.y}`).join(" ")} />
+                </svg>
+                {ZONES.map((zone) => {
+                  const isHeld = held.includes(zone.id);
+                  const edge = frontier();
+                  const mark = isHeld ? "held" : zone.id === edge ? "frontier" : "locked";
+                  return (
+                    <button
+                      key={zone.id}
+                      type="button"
+                      className="zone-pin"
+                      data-state={mark}
+                      data-on={picked === zone.id ? "true" : "false"}
+                      style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
+                      disabled={mark === "locked"}
+                      aria-label={`${zone.name}, ${mark}`}
+                      onClick={() => setPicked(zone.id)}
+                    >
+                      {zone.id}
+                    </button>
+                  );
+                })}
+              </div>
+              <ZoneBrief
+                zone={zoneById(picked)}
+                held={held.includes(picked)}
+                edge={frontier()}
+                onMarch={(id) => {
+                  setMapOpen(false);
+                  press({ t: "march", chapter: id });
+                }}
+              />
+              <button type="button" className="text-btn" onClick={() => setMapOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
         )}
 
         {trailerOpen && (
@@ -500,7 +615,7 @@ export function Castrum() {
             </p>
             <h2>{hud.phase === "victory" ? "ROME REMEMBERS" : "FALL BACK"}</h2>
             <p className="lede">
-              Gloria {hud.gloria}. Waves held {hud.cleared}. Kills {hud.kills}. Gate {hud.fort}.
+              {hud.chapterName}. Gloria {hud.gloria}. Waves held {hud.cleared}. Kills {hud.kills}. Gate {hud.fort}.
             </p>
             <p className="best">Best gloria {hud.best}</p>
             {leftName ? (
@@ -534,8 +649,19 @@ export function Castrum() {
               </ol>
             )}
             <div className="end-actions">
-              <button className="primary" onClick={() => press({ t: "again" })}>
-                March again
+              <button className="primary" onClick={() => press({ t: "march", chapter: frontier() })}>
+                {hud.phase === "victory" ? "Next zone" : "March again"}
+              </button>
+              <button
+                className="ghost"
+                onClick={() => {
+                  setHeld(readHeld());
+                  setPicked(frontier());
+                  setMapOpen(true);
+                  press({ t: "camp" });
+                }}
+              >
+                The map
               </button>
               {hud.phase === "victory" && (
                 <button className="ghost" onClick={() => press({ t: "endless" })}>

@@ -224,6 +224,79 @@
   letter-spacing: 0.08em;
 }
 
+.zone-sheet h2 {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.road {
+  position: relative;
+  height: 22rem;
+  margin-top: 0.8rem;
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle at 20% 10%, color-mix(in oklab, var(--color-gold) 16%, transparent), transparent 42%),
+    color-mix(in oklab, var(--color-olive) 28%, var(--color-ink));
+  overflow: hidden;
+}
+
+.road svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.road polyline {
+  fill: none;
+  stroke: color-mix(in oklab, var(--color-gold) 55%, var(--color-marble-dim));
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.zone-pin {
+  position: absolute;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: -0.85rem 0 0 -0.85rem;
+  padding: 0;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  background: var(--color-panel);
+  color: var(--color-marble-dim);
+  border: 1px solid var(--color-line);
+}
+
+.zone-pin[data-state="held"] {
+  background: var(--color-gold-deep);
+  color: var(--color-marble);
+  border-color: var(--color-gold);
+}
+
+.zone-pin[data-state="frontier"] {
+  background: var(--color-crimson);
+  color: var(--color-marble);
+  border-color: var(--color-gold);
+}
+
+.zone-pin[data-state="locked"] {
+  opacity: 0.45;
+}
+
+.zone-pin[data-on="true"] {
+  outline: 2px solid var(--color-gold);
+  opacity: 1;
+}
+
+.zone-brief {
+  margin-top: 0.75rem;
+}
+
+.zone-brief .primary {
+  margin-top: 0.55rem;
+  width: 100%;
+}
+
 .trailer-player video {
   width: 100%;
   aspect-ratio: 16 / 9;

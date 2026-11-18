@@ -41,6 +41,8 @@ export interface HudModel {
   merit: number;
   meritReady: boolean;
   reel: string | null;
+  chapter: number;
+  chapterName: string;
 }
 
 export const INITIAL_HUD: HudModel = {
@@ -74,6 +76,8 @@ export const INITIAL_HUD: HudModel = {
   merit: 0,
   meritReady: false,
   reel: null,
+  chapter: 1,
+  chapterName: "",
 };
 
 let current = INITIAL_HUD;

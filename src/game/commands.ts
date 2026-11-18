@@ -2,6 +2,7 @@ import type { TargetMode, TowerKind } from "./balance";
 
 export type Command =
   | { t: "start" }
+  | { t: "march"; chapter: number }
   | { t: "wave" }
   | { t: "trailer" }
   | { t: "again" }
