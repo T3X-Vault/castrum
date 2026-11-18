@@ -7,8 +7,8 @@ export type Command =
   | { t: "camp" }
   | { t: "quit" }
   | { t: "surrender" }
-  | { t: "save" }
-  | { t: "continue" }
+  | { t: "save"; slot: number; name: string }
+  | { t: "continue"; slot?: number }
   | { t: "endless" }
   | { t: "pause" }
   | { t: "speed" }

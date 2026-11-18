@@ -4,7 +4,6 @@ import { Wallet } from "lucide-react";
 import {
   connectSolana,
   disconnectSolana,
-  insideWalletApp,
   listSolanaWallets,
   mobileWalletLink,
   MOBILE_WALLETS,
@@ -24,7 +23,6 @@ export function WalletDock() {
   const [phone, setPhone] = useState(false);
   const [linked, setLinked] = useState<WalletSession | null>(null);
   const [wallets, setWallets] = useState<SolanaWallet[]>([]);
-  const [inside, setInside] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
@@ -33,13 +31,11 @@ export function WalletDock() {
     setPhone(onPhone());
     setLinked(readSession());
     setWallets(listSolanaWallets());
-    setInside(insideWalletApp());
   }, [open]);
 
   useEffect(() => {
     const refresh = () => {
       setWallets(listSolanaWallets());
-      setInside(insideWalletApp());
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
@@ -80,11 +76,17 @@ export function WalletDock() {
   }
 
   async function onDisconnect() {
-    if (linked) await disconnectSolana(linked.walletName);
+    const name = linked?.walletName;
     writeSession(null);
     setLinked(null);
     setBalance(null);
     setError("");
+    if (!name) return;
+    try {
+      await disconnectSolana(name);
+    } catch {
+      /* the choice list is already back */
+    }
   }
 
   const page = typeof window === "undefined" ? "" : window.location.href;
@@ -100,11 +102,11 @@ export function WalletDock() {
         <p className="eyebrow">Solana only</p>
         <h2 id="wallet-title">T3X wallet</h2>
         <p>
-          {inside
-            ? `You are inside ${inside}. Connect it below.`
+          {linked
+            ? "This wallet is connected. Disconnect to choose another."
             : phone
-              ? "On a phone, open this page in Phantom, Solflare, or Backpack. The app connects from there."
-              : "Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first."}
+              ? "Open this page in Phantom, Solflare, or Backpack, or use T3x Vault."
+              : "Choose Phantom, Solflare, Backpack, or T3x Vault. Connect is accepted when the wallet holds T3X."}
         </p>
         {linked && (
           <div className="wallet-linked">
@@ -115,7 +117,7 @@ export function WalletDock() {
             </button>
           </div>
         )}
-        {!inside && (
+        {!linked && (
           <div className="wallet-apps">
             {MOBILE_WALLETS.map((app) => (
               <a

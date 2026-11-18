@@ -19,7 +19,7 @@ import {
   type TowerKind,
 } from "./balance";
 import { drain, type Command } from "./commands";
-import { clearRun, loadRun, writeRun } from "./records";
+import { clearRun, loadRun, readSlot, saveSlot } from "./records";
 import { patchHud, previewLine, type Phase } from "./hud";
 import { makeEnemy, poseRig, tickFigures } from "./figures";
 import {
@@ -440,8 +440,8 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     }
     if (command.t === "save") {
       if (!state || state.outcome !== "play" || (phase !== "playing" && phase !== "paused")) return;
-      writeRun({ version: 1, state, speed, paused: phase === "paused" });
-      say("The run is kept on this device.");
+      const kept = saveSlot(command.slot, { version: 1, state, speed, paused: phase === "paused" }, command.name);
+      say(kept ? `${kept} is kept on this device.` : "That slot could not be kept.");
       publish();
       return;
     }
@@ -458,7 +458,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       return;
     }
     if (command.t === "continue") {
-      const run = loadRun();
+      const run = command.slot != null ? (readSlot(command.slot)?.run ?? null) : loadRun();
       if (!run) return;
       clearPlay();
       state = run.state;

@@ -27,8 +27,10 @@ import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, type TargetMode, ty
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
-import { hasRun, loadScores, rememberScore, type ScoreRow } from "@/game/records";
+import { deleteSlot, hasRun, listSlots, loadScores, rememberScore, SLOT_IDS, type ScoreRow, type SlotRecord } from "@/game/records";
 import { WalletDock } from "@/components/WalletDock";
+import { authEnabled, signIn, signOut } from "@/lib/auth/client";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 const ICONS: Record<TowerKind, typeof Crosshair> = {
   scorpio: Zap,
@@ -103,6 +105,13 @@ export function Castrum() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [savedRun, setSavedRun] = useState(false);
   const [leftName, setLeftName] = useState("");
+  const [slotsOpen, setSlotsOpen] = useState<null | "play" | "camp">(null);
+  const [slots, setSlots] = useState<SlotRecord[]>([]);
+  const [slotName, setSlotName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [xNote, setXNote] = useState("");
+  const [xBusy, setXBusy] = useState(false);
+  const account = useCurrentUserState();
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
@@ -113,6 +122,26 @@ export function Castrum() {
     setSavedRun(hasRun());
     if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
   }, [hud.phase]);
+
+  function refreshSlots() {
+    setSlots(listSlots());
+    setSavedRun(hasRun());
+  }
+
+  function connectX() {
+    if (!authEnabled) {
+      setXNote("X sign-in is not turned on for this build.");
+      return;
+    }
+    setXBusy(true);
+    setXNote("");
+    void signIn("grok-x", { callbackURL: "/" }).catch((err: unknown) => {
+      setXBusy(false);
+      setXNote(err instanceof Error ? err.message : "X sign-in failed.");
+    });
+  }
+
+  const xAccount = authEnabled && account.user && !account.user.isDevFallback ? account.user : null;
 
   function leaveScore(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -260,7 +289,10 @@ export function Castrum() {
                         data-testid="save-run"
                         onClick={() => {
                           setGearOpen(false);
-                          press({ t: "save" });
+                          setSlotName("");
+                          setPendingDelete(null);
+                          setSlots(listSlots());
+                          setSlotsOpen("play");
                         }}
                       >
                         <Save size={16} aria-hidden="true" />
@@ -348,8 +380,41 @@ export function Castrum() {
                     Continue
                   </button>
                 )}
+                <button
+                  className="ghost"
+                  data-testid="slots"
+                  onClick={() => {
+                    setPendingDelete(null);
+                    refreshSlots();
+                    setSlotsOpen("camp");
+                  }}
+                >
+                  Slots
+                </button>
                 <WalletDock />
               </div>
+              <div className="socials">
+                {xAccount ? (
+                  <button className="ghost" type="button" onClick={() => void signOut()}>
+                    X · {xAccount.displayName ?? "Connected"}
+                  </button>
+                ) : (
+                  <button className="ghost" type="button" data-testid="connect-x" disabled={xBusy} onClick={connectX}>
+                    {xBusy ? "Opening X…" : "Connect X"}
+                  </button>
+                )}
+                <button className="ghost" type="button" disabled>
+                  Facebook · Coming soon
+                </button>
+                <button className="ghost" type="button" disabled>
+                  Instagram · Coming soon
+                </button>
+              </div>
+              {xNote && (
+                <p className="wallet-note" role="status">
+                  {xNote}
+                </p>
+              )}
               <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
               {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
               {scores.length > 0 && (
@@ -548,6 +613,109 @@ export function Castrum() {
             </>
           )}
         </footer>
+      )}
+      {slotsOpen && (
+        <div className="wallet-back" role="presentation" onClick={() => setSlotsOpen(null)}>
+          <div
+            className="wallet-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slot-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">This device</p>
+            <h2 id="slot-title">{slotsOpen === "play" ? "Keep this fight" : "Saved slots"}</h2>
+            <p>Four slots stay on this device. Load brings that fight back. Delete removes only that slot.</p>
+            {slotsOpen === "play" && (
+              <label className="slot-name">
+                Name
+                <input
+                  value={slotName}
+                  maxLength={18}
+                  placeholder="Legion"
+                  onChange={(event) => setSlotName(event.target.value)}
+                />
+              </label>
+            )}
+            <ul className="slot-list">
+              {SLOT_IDS.map((id) => {
+                const row = slots.find((slot) => slot.id === id);
+                return (
+                  <li key={id}>
+                    <div>
+                      <b>Slot {id}</b>
+                      <span>{row ? `${row.name} · wave ${row.run.state.wave}` : "Empty"}</span>
+                    </div>
+                    <div className="slot-actions">
+                      {slotsOpen === "play" && (
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid={`save-slot-${id}`}
+                          onClick={() => {
+                            const name = slotName.trim() || row?.name || `Slot ${id}`;
+                            press({ t: "save", slot: id, name });
+                            let tries = 0;
+                            const tick = () => {
+                              refreshSlots();
+                              tries += 1;
+                              if (tries < 8 && !listSlots().some((slot) => slot.id === id && slot.name === name.slice(0, 18))) {
+                                window.setTimeout(tick, 50);
+                              }
+                            };
+                            window.setTimeout(tick, 30);
+                          }}
+                        >
+                          {row ? "Overwrite" : "Save"}
+                        </button>
+                      )}
+                      {row && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid={`load-slot-${id}`}
+                          onClick={() => {
+                            setSlotsOpen(null);
+                            press({ t: "continue", slot: id });
+                          }}
+                        >
+                          Load
+                        </button>
+                      )}
+                      {row && pendingDelete !== id && (
+                        <button
+                          type="button"
+                          className="ghost danger"
+                          data-testid={`delete-slot-${id}`}
+                          onClick={() => setPendingDelete(id)}
+                        >
+                          Delete
+                        </button>
+                      )}
+                      {pendingDelete === id && (
+                        <button
+                          type="button"
+                          className="danger"
+                          data-testid={`confirm-delete-${id}`}
+                          onClick={() => {
+                            deleteSlot(id);
+                            setPendingDelete(null);
+                            refreshSlots();
+                          }}
+                        >
+                          Confirm delete
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" className="text-btn" onClick={() => setSlotsOpen(null)}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

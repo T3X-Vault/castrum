@@ -71,6 +71,80 @@ export function clearRun() {
   }
 }
 
+const SLOTS_KEY = "castrum-slots-v1";
+export const SLOT_IDS = [1, 2, 3, 4] as const;
+
+export type SlotRecord = {
+  id: number;
+  name: string;
+  at: number;
+  run: SavedRun;
+};
+
+function asRun(value: unknown): SavedRun | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<SavedRun>;
+  if (parsed.version !== 1 || !isState(parsed.state) || parsed.state.outcome !== "play") return null;
+  const speed = parsed.speed === 2 || parsed.speed === 3 ? parsed.speed : 1;
+  return { version: 1, state: parsed.state, speed, paused: Boolean(parsed.paused) };
+}
+
+function readSlots(): SlotRecord[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SLOTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SlotRecord[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((row) => {
+      const run = asRun(row?.run);
+      if (!run || typeof row.id !== "number" || !SLOT_IDS.includes(row.id as (typeof SLOT_IDS)[number])) return [];
+      const name = typeof row.name === "string" && row.name.trim() ? row.name.trim().slice(0, 18) : `Slot ${row.id}`;
+      return [{ id: row.id, name, at: typeof row.at === "number" ? row.at : 0, run }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function storeSlots(slots: SlotRecord[]) {
+  localStorage.setItem(SLOTS_KEY, JSON.stringify(slots));
+}
+
+export function listSlots(): SlotRecord[] {
+  return readSlots().sort((a, b) => a.id - b.id);
+}
+
+export function readSlot(id: number): SlotRecord | null {
+  return readSlots().find((slot) => slot.id === id) ?? null;
+}
+
+export function saveSlot(id: number, run: SavedRun, name: string): string | null {
+  if (!SLOT_IDS.includes(id as (typeof SLOT_IDS)[number])) return null;
+  const kept = name.replace(/\s+/g, " ").trim().slice(0, 18) || `Slot ${id}`;
+  const next = readSlots().filter((slot) => slot.id !== id);
+  next.push({ id, name: kept, at: Date.now(), run });
+  try {
+    storeSlots(next);
+    writeRun(run);
+  } catch {
+    return null;
+  }
+  return kept;
+}
+
+export function deleteSlot(id: number) {
+  const next = readSlots().filter((slot) => slot.id !== id);
+  try {
+    storeSlots(next);
+    const newest = next.sort((a, b) => b.at - a.at)[0];
+    if (newest) writeRun(newest.run);
+    else clearRun();
+  } catch {
+    /* private mode */
+  }
+}
+
 export function loadScores(): ScoreRow[] {
   if (typeof localStorage === "undefined") return [];
   try {
