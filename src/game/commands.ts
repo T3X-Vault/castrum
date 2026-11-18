@@ -15,7 +15,8 @@ export type Command =
   | { t: "masonry" }
   | { t: "mute" }
   | { t: "shake" }
-  | { t: "manual"; open: boolean };
+  | { t: "manual"; open: boolean }
+  | { t: "dismiss" };
 
 const queue: Command[] = [];
 

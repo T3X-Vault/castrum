@@ -332,16 +332,6 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     const next = masonry < 4 ? MASONRY[masonry + 1]! : null;
     const tower = state && selected != null ? state.towers.find((t) => t.pad === selected) : undefined;
     const now = performance.now();
-    const contextual =
-      phase === "menu"
-        ? "Raise the walls. Man the engines. Hold the ford."
-        : !state || state.towers.length === 0
-          ? "Arm an engine, then set it on a stone pad."
-          : state.fighting
-            ? waveTitle
-            : state.wave === 0
-              ? "Sound the bucina when the line is ready."
-              : "The road is quiet. Call the next host, or raise the walls.";
     const bossE = state?.enemies.find((e) => e.alive && e.kind === "warlord");
     patchHud({
       phase,
@@ -372,7 +362,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
           }
         : null,
       preview: preview,
-      banner: now < bannerUntil ? banner : contextual,
+      banner: now < bannerUntil ? banner : "",
       boss: bossE ? { name: ENEMIES.warlord.name, hp: Math.max(0, bossE.hp), max: bossE.maxHp } : null,
       speed,
       muted,
@@ -389,6 +379,12 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
   }
 
   function act(command: Command) {
+    if (command.t === "dismiss") {
+      banner = "";
+      bannerUntil = 0;
+      publish();
+      return;
+    }
     if (command.t === "manual") {
       manual = command.open;
       publish();

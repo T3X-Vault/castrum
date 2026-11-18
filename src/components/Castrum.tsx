@@ -249,14 +249,22 @@ export function Castrum() {
         </header>
       )}
 
+      {hud.phase !== "menu" && hud.banner && (
+        <button
+          type="button"
+          className="banner"
+          data-hot={hud.fighting ? "true" : "false"}
+          onClick={() => press({ t: "dismiss" })}
+          aria-label={`Dismiss announcement: ${hud.banner}`}
+        >
+          <span>{hud.banner}</span>
+          <X size={16} aria-hidden="true" />
+        </button>
+      )}
+
       <div className="stage">
         <canvas className="gl" aria-label="Roman battlefield" />
         <canvas className="fx" aria-hidden="true" />
-        {hud.phase !== "menu" && (
-          <div className="banner" data-hot={hud.fighting ? "true" : "false"}>
-            {hud.banner}
-          </div>
-        )}
         {bootError && <p className="boot-error">{bootError}</p>}
 
         {hud.phase === "menu" && (
