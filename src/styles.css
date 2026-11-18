@@ -749,6 +749,125 @@
   font-size: 0.68rem;
 }
 
+.community-list,
+.updates,
+.friend-list,
+.freebees,
+.brand-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.community-list .ghost,
+.freebees a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  text-decoration: none;
+}
+
+.community-list .ghost span,
+.updates span,
+.freebees a span {
+  color: var(--color-marble-dim);
+  font-size: 0.78rem;
+}
+
+.updates {
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.updates li,
+.friend-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.friend-list {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.friend-list li {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.freebees a span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.freebees a b,
+.updates b {
+  color: var(--color-marble);
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.brand-row a,
+.freebees .brand-x {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.7rem;
+  min-height: 3rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.brand-row svg,
+.freebees .brand-x svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentColor;
+  flex: none;
+}
+
+.brand-x {
+  background: #000;
+  color: #fff;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.brand-fb {
+  background: #0866ff;
+  color: #fff;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 700;
+}
+
+.brand-ig {
+  background: radial-gradient(circle at 30% 120%, #f9ce34, #ee2a7b 42%, #6228d7);
+  color: #fff;
+  font-family: "Grand Hotel", cursive;
+  font-weight: 400;
+  font-size: 1.7rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.community-sheet h2 {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+}
+
 .socials {
   display: flex;
   gap: 0.55rem;

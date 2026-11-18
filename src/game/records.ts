@@ -3,6 +3,7 @@ import type { GameState } from "./sim";
 const RUN_KEY = "castrum-run-v1";
 const SCORES_KEY = "castrum-scores-v1";
 const MERIT_KEY = "castrum-merit-v1";
+const FRIENDS_KEY = "castrum-friends-v1";
 /** Cleared waves across games. A few full watches fill the bar. */
 export const MERIT_WAVES = 36;
 const SCORE_LIMIT = 20;
@@ -216,6 +217,29 @@ export function noteWaveCleared(): Merit {
     return current;
   }
   return next;
+}
+
+export function listFriends(): string[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FRIENDS_KEY) ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((name) => typeof name === "string")
+      .map((name) => name.replace(/\s+/g, " ").trim().slice(0, 18))
+      .filter(Boolean)
+      .slice(0, 24);
+  } catch {
+    return [];
+  }
+}
+
+export function saveFriends(names: string[]) {
+  try {
+    localStorage.setItem(FRIENDS_KEY, JSON.stringify(names.slice(0, 24)));
+  } catch {
+    /* private mode */
+  }
 }
 
 export function markMeritClaimed(): Merit {

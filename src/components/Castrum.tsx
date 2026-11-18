@@ -38,7 +38,18 @@ import {
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
-import { deleteSlot, hasRun, listSlots, loadScores, rememberScore, SLOT_IDS, type ScoreRow, type SlotRecord } from "@/game/records";
+import {
+  deleteSlot,
+  hasRun,
+  listFriends,
+  listSlots,
+  loadScores,
+  rememberScore,
+  saveFriends,
+  SLOT_IDS,
+  type ScoreRow,
+  type SlotRecord,
+} from "@/game/records";
 import { WalletDock } from "@/components/WalletDock";
 
 function ZoneBrief({
@@ -177,6 +188,9 @@ export function Castrum() {
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [community, setCommunity] = useState<null | "home" | "scores" | "updates" | "connect" | "friends" | "freebees">(null);
+  const [friends, setFriends] = useState<string[]>([]);
+  const [friendName, setFriendName] = useState("");
   const [held, setHeld] = useState<number[]>([]);
   const [picked, setPicked] = useState(1);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -186,6 +200,7 @@ export function Castrum() {
 
   useEffect(() => {
     setScores(loadScores());
+    setFriends(listFriends());
     setHeld(readHeld());
     setPicked(frontier());
     setSavedRun(hasRun());
@@ -515,41 +530,217 @@ export function Castrum() {
                   Slots
                 </button>
                 <WalletDock />
-              </div>
-              <div className="socials">
-                <button className="ghost icon-btn" type="button" disabled aria-label="X, coming soon">
-                  <XMark />
-                </button>
-                <button className="ghost icon-btn" type="button" disabled aria-label="Facebook, coming soon">
-                  <FacebookMark />
-                </button>
-                <button className="ghost icon-btn" type="button" disabled aria-label="Instagram, coming soon">
-                  <InstagramMark />
+                <button
+                  className="ghost"
+                  type="button"
+                  data-testid="community"
+                  onClick={() => {
+                    setScores(loadScores());
+                    setFriends(listFriends());
+                    setCommunity("home");
+                  }}
+                >
+                  Community
                 </button>
               </div>
               <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
-              {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
-              <p className="board-label">Scores</p>
-              {scores.length === 0 ? (
-                <p className="wallet-note">No scores on this device yet.</p>
-              ) : (
-                <ol className="board" data-testid="scores">
-                  {scores.slice(0, 5).map((row) => (
-                    <li key={`${row.at}-${row.name}`}>
-                      <span>{row.name}</span>
-                      <span>
-                        {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
               <a className="credit" href="https://futuret3.com.au" target="_blank" rel="noreferrer">
                 <img src="/brand/futuret3ch-mark.png" alt="" width={28} height={26} />
                 Created by Futuret3ch
               </a>
             </section>
           </>
+        )}
+
+        {community && (
+          <div className="wallet-back" role="presentation" onClick={() => setCommunity(null)}>
+            <div
+              className="wallet-sheet community-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Community"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="eyebrow">Community</p>
+              <h2>
+                {community === "home"
+                  ? "The camp"
+                  : community === "scores"
+                    ? "Score cards"
+                    : community === "updates"
+                      ? "Updates"
+                      : community === "connect"
+                        ? "Connect"
+                        : community === "friends"
+                          ? "My friends"
+                          : "Freebees"}
+              </h2>
+              {community !== "home" && (
+                <button type="button" className="text-btn" onClick={() => setCommunity("home")}>
+                  Back
+                </button>
+              )}
+              {community === "home" && (
+                <div className="community-list">
+                  <button type="button" className="ghost" onClick={() => setCommunity("scores")}>
+                    Score cards
+                    <span>World coming soon</span>
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setCommunity("updates")}>
+                    Updates
+                    <span>What changed in the fort</span>
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setCommunity("connect")}>
+                    Connect
+                    <span>X, Facebook, Instagram</span>
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setCommunity("friends")}>
+                    My friends
+                    <span>{friends.length} on this device</span>
+                  </button>
+                  <button type="button" className="ghost" onClick={() => setCommunity("freebees")}>
+                    Freebees
+                    <span>T3X, Futuret3ch, and X</span>
+                  </button>
+                  <p className="wallet-note">Zones held {held.length}/{CHAPTER_COUNT}. A shared camp comes later. Names you keep here stay on this device.</p>
+                </div>
+              )}
+              {community === "scores" && (
+                <>
+                  <p>These names are kept on this device. A world board, the same card for everyone, is coming soon.</p>
+                  {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
+                  {scores.length === 0 ? (
+                    <p className="wallet-note">No scores on this device yet.</p>
+                  ) : (
+                    <ol className="board" data-testid="scores">
+                      {scores.map((row) => (
+                        <li key={`${row.at}-${row.name}`}>
+                          <span>{row.name}</span>
+                          <span>
+                            {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </>
+              )}
+              {community === "updates" && (
+                <ul className="updates">
+                  <li>
+                    <b>The province</b>
+                    <span>Twenty-four zones. Win one and it stays. Lose the march and the ground behind you falls.</span>
+                  </li>
+                  <li>
+                    <b>The trailer</b>
+                    <span>A short film of the ford, the host, the gate, and the queen.</span>
+                  </li>
+                  <li>
+                    <b>T3X</b>
+                    <span>The top bar fills as you clear waves. The coin itself waits on a treasury.</span>
+                  </li>
+                  <li>
+                    <b>Score cards</b>
+                    <span>Still this device only. The world board is the next gate.</span>
+                  </li>
+                </ul>
+              )}
+              {community === "connect" && (
+                <div className="brand-row">
+                  <a className="brand-x" href="https://x.com/futuret3ch" target="_blank" rel="noreferrer">
+                    <XMark />
+                    <span>X</span>
+                  </a>
+                  <a className="brand-fb" href="https://www.facebook.com/futuret3ch" target="_blank" rel="noreferrer">
+                    <FacebookMark />
+                    <span>Facebook</span>
+                  </a>
+                  <a className="brand-ig" href="https://www.instagram.com/futuret3ch" target="_blank" rel="noreferrer">
+                    <InstagramMark />
+                    <span>Instagram</span>
+                  </a>
+                </div>
+              )}
+              {community === "friends" && (
+                <>
+                  <p>Names you add stay on this device. A friends list that travels with an account is coming soon.</p>
+                  <form
+                    className="score-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const name = friendName.replace(/\s+/g, " ").trim().slice(0, 18);
+                      if (!name || friends.includes(name)) return;
+                      const next = [name, ...friends].slice(0, 24);
+                      saveFriends(next);
+                      setFriends(next);
+                      setFriendName("");
+                    }}
+                  >
+                    <input
+                      value={friendName}
+                      maxLength={18}
+                      placeholder="A name"
+                      aria-label="Friend name"
+                      onChange={(event) => setFriendName(event.target.value)}
+                    />
+                    <button className="primary" type="submit">
+                      Add
+                    </button>
+                  </form>
+                  {friends.length === 0 ? (
+                    <p className="wallet-note">No friends kept here yet.</p>
+                  ) : (
+                    <ul className="friend-list">
+                      {friends.map((name) => (
+                        <li key={name}>
+                          <span>{name}</span>
+                          <button
+                            type="button"
+                            className="text-btn"
+                            onClick={() => {
+                              const next = friends.filter((friend) => friend !== name);
+                              saveFriends(next);
+                              setFriends(next);
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {community === "freebees" && (
+                <div className="freebees">
+                  <a href="https://t3x-wallet.vercel.app/" target="_blank" rel="noreferrer">
+                    <img src="/brand/t3x-badge.png" alt="" width={36} height={38} />
+                    <span>
+                      <b>T3X</b>
+                      Open T3x Vault
+                    </span>
+                  </a>
+                  <a href="https://futuret3ch.com.au" target="_blank" rel="noreferrer">
+                    <img src="/brand/futuret3ch-mark.png" alt="" width={36} height={34} />
+                    <span>
+                      <b>Futuret3ch</b>
+                      The studio site
+                    </span>
+                  </a>
+                  <a className="brand-x" href="https://x.com/futuret3ch" target="_blank" rel="noreferrer">
+                    <XMark />
+                    <span>
+                      <b>X</b>
+                      @futuret3ch
+                    </span>
+                  </a>
+                </div>
+              )}
+              <button type="button" className="text-btn" onClick={() => setCommunity(null)}>
+                Close
+              </button>
+            </div>
+          </div>
         )}
 
         {mapOpen && (
