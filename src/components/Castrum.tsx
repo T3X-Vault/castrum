@@ -194,6 +194,7 @@ export function Castrum() {
   const [held, setHeld] = useState<number[]>([]);
   const [picked, setPicked] = useState(1);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
   const choosing = !hud.fighting;
@@ -206,6 +207,34 @@ export function Castrum() {
     setSavedRun(hasRun());
     if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
   }, [hud.phase]);
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    const stage = menu?.parentElement;
+    if (!menu || !stage || hud.phase !== "menu") return;
+    let frame = 0;
+    const fit = () => {
+      menu.style.zoom = "1";
+      const room = stage.clientHeight - 6;
+      const needed = menu.getBoundingClientRect().height;
+      const scale = Math.min(1, room / Math.max(needed, 1));
+      menu.style.zoom = scale < 0.995 ? scale.toFixed(3) : "1";
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    };
+    schedule();
+    const watch = new ResizeObserver(schedule);
+    watch.observe(stage);
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      watch.disconnect();
+      window.removeEventListener("resize", schedule);
+      menu.style.zoom = "";
+    };
+  }, [hud.phase, savedRun]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -477,7 +506,7 @@ export function Castrum() {
             <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => setTrailerOpen(true)}>
               Trailer
             </button>
-            <section className="menu">
+            <section className="menu" ref={menuRef}>
               <div className="menu-head">
                 <h1>CASTRUM</h1>
                 <div className="menu-marks">
