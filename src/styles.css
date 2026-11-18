@@ -154,6 +154,25 @@
   align-items: center;
 }
 
+.hud[data-quiet="true"] {
+  gap: 0.35rem 0.55rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.tray {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+.tray[data-on="true"],
+.hud[data-quiet="true"] .tray {
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}
+
 .primary,
 .ghost,
 .danger,
@@ -520,6 +539,19 @@
   .hud-actions {
     margin-left: 0;
     width: 100%;
+  }
+
+  .hud[data-quiet="true"] .gate {
+    min-width: 5.2rem;
+  }
+
+  .hud[data-quiet="true"] .gate-bar {
+    width: 4.4rem;
+  }
+
+  .hud[data-quiet="true"] .hud-actions {
+    width: auto;
+    margin-left: auto;
   }
 
   .tcard {

@@ -1,10 +1,14 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import {
   BookOpen,
   Castle,
+  ChevronDown,
+  ChevronUp,
   CircleDot,
   Crosshair,
   Flame,
+  Maximize,
+  Minimize,
   Pause,
   Play,
   Shield,
@@ -46,9 +50,61 @@ function press(command: Command) {
   send(command);
 }
 
+type FullscreenEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FullscreenDoc = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+function useFullscreen(root: RefObject<HTMLElement | null>) {
+  const [active, setActive] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    const doc = document as FullscreenDoc;
+    const el = document.documentElement as FullscreenEl;
+    setSupported(Boolean(el.requestFullscreen || el.webkitRequestFullscreen));
+    const sync = () => setActive(Boolean(document.fullscreenElement || doc.webkitFullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  const toggle = () => {
+    const doc = document as FullscreenDoc;
+    const current = document.fullscreenElement || doc.webkitFullscreenElement;
+    if (current) {
+      const exit = document.exitFullscreen?.bind(document) ?? doc.webkitExitFullscreen?.bind(doc);
+      void exit?.();
+      return;
+    }
+    const el = (root.current ?? document.documentElement) as FullscreenEl;
+    const enter = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
+    void Promise.resolve(enter?.()).catch(() => undefined);
+  };
+
+  return { active, supported, toggle };
+}
+
 export function Castrum() {
   const hud = useHud();
   const [bootError, setBootError] = useState<string | null>(null);
+  const [armory, setArmory] = useState(true);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const screen = useFullscreen(rootRef);
+  const fightingRef = useRef(hud.fighting);
+  const choosing = !hud.fighting;
+
+  useEffect(() => {
+    const was = fightingRef.current;
+    fightingRef.current = hud.fighting;
+    if (hud.phase !== "playing" && hud.phase !== "paused") return;
+    if (hud.fighting && !was) setArmory(false);
+    else if (!hud.fighting && was) setArmory(true);
+  }, [hud.fighting, hud.phase]);
 
   useEffect(() => {
     const gl = document.querySelector<HTMLCanvasElement>("canvas.gl");
@@ -76,16 +132,19 @@ export function Castrum() {
   }, []);
 
   const gatePct = hud.fortMax > 0 ? Math.max(0, Math.min(100, (hud.fort / hud.fortMax) * 100)) : 0;
-  const showDock = hud.phase === "playing" || hud.phase === "paused";
+  const inMatch = hud.phase === "playing" || hud.phase === "paused";
+  const showShop = inMatch && armory;
 
   return (
-    <div className="castrum">
+    <div className="castrum" ref={rootRef} data-quiet={hud.fighting ? "true" : "false"}>
       {hud.phase !== "menu" && (
-        <header className="hud">
-          <div className="brand">
-            <span className="eyebrow">Legio IX</span>
-            <span className="word">CASTRUM</span>
-          </div>
+        <header className="hud" data-quiet={hud.fighting ? "true" : "false"}>
+          {choosing && (
+            <div className="brand">
+              <span className="eyebrow">Legio IX</span>
+              <span className="word">CASTRUM</span>
+            </div>
+          )}
           <div className="stat">
             <span>Denarii</span>
             <strong className="bump" key={hud.gold}>
@@ -98,10 +157,12 @@ export function Castrum() {
               <span className="gate-fill" style={{ width: `${gatePct}%` }} />
             </div>
           </div>
-          <div className="stat walls">
-            <span>Walls</span>
-            <strong>{hud.masonryName}</strong>
-          </div>
+          {choosing && (
+            <div className="stat walls">
+              <span>Walls</span>
+              <strong>{hud.masonryName}</strong>
+            </div>
+          )}
           <div className="stat">
             <span>Wave</span>
             <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
@@ -117,13 +178,17 @@ export function Castrum() {
             </div>
           )}
           <div className="hud-actions">
-            <button className="primary" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
-              {hud.fighting ? "Host on the road" : "Sound the bucina"}
-            </button>
-            <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
-              <Castle size={16} aria-hidden="true" /> {hud.masonryNext ?? "Castrum complete"}
-              {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
-            </button>
+            {choosing && (
+              <button className="primary" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
+                Sound the bucina
+              </button>
+            )}
+            {choosing && (
+              <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
+                <Castle size={16} aria-hidden="true" /> {hud.masonryNext ?? "Castrum complete"}
+                {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
+              </button>
+            )}
             <button className="icon-btn" onClick={() => press({ t: "speed" })} aria-label={`Speed times ${hud.speed}`}>
               ×{hud.speed}
             </button>
@@ -134,25 +199,52 @@ export function Castrum() {
             >
               {hud.phase === "paused" ? <Play size={18} /> : <Pause size={18} />}
             </button>
-            <button
-              className="icon-btn"
-              data-on={hud.muted ? "true" : "false"}
-              onClick={() => press({ t: "mute" })}
-              aria-label={hud.muted ? "Unmute" : "Mute"}
-            >
-              {hud.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
-            <button
-              className="icon-btn"
-              data-on={hud.shakeOn ? "true" : "false"}
-              onClick={() => press({ t: "shake" })}
-              aria-label={hud.shakeOn ? "Turn screen shake off" : "Turn screen shake on"}
-            >
-              <Vibrate size={18} />
-            </button>
-            <button className="icon-btn" onClick={() => press({ t: "manual", open: true })} aria-label="Field manual">
-              <BookOpen size={18} />
-            </button>
+            {choosing && (
+              <button
+                className="icon-btn"
+                data-on={hud.muted ? "true" : "false"}
+                onClick={() => press({ t: "mute" })}
+                aria-label={hud.muted ? "Unmute" : "Mute"}
+              >
+                {hud.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
+            )}
+            {choosing && (
+              <button
+                className="icon-btn"
+                data-on={hud.shakeOn ? "true" : "false"}
+                onClick={() => press({ t: "shake" })}
+                aria-label={hud.shakeOn ? "Turn screen shake off" : "Turn screen shake on"}
+              >
+                <Vibrate size={18} />
+              </button>
+            )}
+            {choosing && (
+              <button className="icon-btn" onClick={() => press({ t: "manual", open: true })} aria-label="Field manual">
+                <BookOpen size={18} />
+              </button>
+            )}
+            {screen.supported && (
+              <button
+                className="icon-btn"
+                data-on={screen.active ? "true" : "false"}
+                onClick={screen.toggle}
+                aria-label={screen.active ? "Leave fullscreen" : "Fill the screen"}
+              >
+                {screen.active ? <Minimize size={18} /> : <Maximize size={18} />}
+              </button>
+            )}
+            {inMatch && (
+              <button
+                className="ghost tray"
+                data-on={armory ? "true" : "false"}
+                aria-pressed={armory}
+                onClick={() => setArmory((open) => !open)}
+              >
+                {armory ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronUp size={16} aria-hidden="true" />}
+                Engines
+              </button>
+            )}
           </div>
         </header>
       )}
@@ -184,6 +276,11 @@ export function Castrum() {
               <button className="ghost" onClick={() => press({ t: "manual", open: true })}>
                 Field manual
               </button>
+              {screen.supported && (
+                <button className="icon-btn" onClick={screen.toggle} aria-label={screen.active ? "Leave fullscreen" : "Fill the screen"}>
+                  {screen.active ? <Minimize size={18} /> : <Maximize size={18} />}
+                </button>
+              )}
             </div>
             {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
           </section>
@@ -234,10 +331,11 @@ export function Castrum() {
             </header>
             <p>
               Engines shoot whoever is furthest down the road unless you change their aim. First protects the gate.
-              Stones and oil punish armor, rams, and elephants. Drag to orbit the field, right-drag or Shift-drag to
-              slide, scroll or pinch to zoom, R resets the eye. WASD and the arrows move the view. Keys: 1–6 arm an
-              engine, Space calls the host, U improves the selected engine, M raises the fort, T cycles aim, Q changes
-              speed, Esc pauses.
+              Stones and oil punish armor, rams, and elephants. The engines tray is open while you choose, and it folds
+              away when the bucina sounds. Engines brings it back. The frame control fills the screen. Drag to orbit
+              the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R resets the eye. WASD and the
+              arrows move the view. Keys: 1–6 arm an engine, Space calls the host, U improves the selected engine, M
+              raises the fort, T cycles aim, Q changes speed, Esc pauses.
             </p>
             <div className="manual-grid">
               {TOWER_KINDS.map((kind) => {
@@ -274,7 +372,7 @@ export function Castrum() {
         )}
       </div>
 
-      {showDock && (
+      {showShop && (
         <footer className="dock">
           {hud.selected && (
             <div className="inspector">
@@ -302,31 +400,35 @@ export function Castrum() {
               </button>
             </div>
           )}
-          <p className="dock-note">{hud.preview}</p>
-          <div className="cards">
-            {TOWER_KINDS.map((kind) => {
-              const tower = TOWERS[kind];
-              const Icon = ICONS[kind];
-              const poor = hud.gold < tower.cost;
-              return (
-                <button
-                  key={kind}
-                  className="tcard"
-                  data-on={hud.armed === kind ? "true" : "false"}
-                  data-poor={poor && hud.armed !== kind ? "true" : "false"}
-                  onClick={() => press({ t: "arm", kind })}
-                >
-                  <span className="top">
-                    <Icon size={16} aria-hidden="true" />
-                    <span className="pip" style={{ ["--pip" as string]: tower.pennant }} />
-                    <span className="kbd">{tower.hotkey}</span>
-                  </span>
-                  <b>{tower.name}</b>
-                  <span className="meta">{tower.cost} denarii</span>
-                </button>
-              );
-            })}
-          </div>
+          {showShop && (
+            <>
+              <p className="dock-note">{hud.preview}</p>
+              <div className="cards">
+                {TOWER_KINDS.map((kind) => {
+                  const tower = TOWERS[kind];
+                  const Icon = ICONS[kind];
+                  const poor = hud.gold < tower.cost;
+                  return (
+                    <button
+                      key={kind}
+                      className="tcard"
+                      data-on={hud.armed === kind ? "true" : "false"}
+                      data-poor={poor && hud.armed !== kind ? "true" : "false"}
+                      onClick={() => press({ t: "arm", kind })}
+                    >
+                      <span className="top">
+                        <Icon size={16} aria-hidden="true" />
+                        <span className="pip" style={{ ["--pip" as string]: tower.pennant }} />
+                        <span className="kbd">{tower.hotkey}</span>
+                      </span>
+                      <b>{tower.name}</b>
+                      <span className="meta">{tower.cost} denarii</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </footer>
       )}
     </div>
