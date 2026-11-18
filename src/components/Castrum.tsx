@@ -215,6 +215,15 @@ export function Castrum() {
     };
   }, []);
 
+  function beginFresh() {
+    resetMap();
+    setHeld([]);
+    setPicked(1);
+    setGearOpen(false);
+    setMapOpen(false);
+    press({ t: "march", chapter: 1 });
+  }
+
   function refreshSlots() {
     setSlots(listSlots());
     setSavedRun(hasRun());
@@ -404,6 +413,9 @@ export function Castrum() {
                         <LogOut size={16} aria-hidden="true" />
                         Quit
                       </button>
+                      <button className="ghost" type="button" data-testid="new-game-fight" onClick={beginFresh}>
+                        New game
+                      </button>
                     </>
                   )}
                   <button className="ghost" onClick={() => press({ t: "speed" })}>
@@ -464,23 +476,17 @@ export function Castrum() {
               </div>
               <p className="lede">Hold the ford.</p>
               <div className="menu-actions">
+                <button className="primary" data-testid="begin" onClick={() => press({ t: "march", chapter: frontier() })}>
+                  {provinceHeld() ? "Replay the far bank" : `March · ${zoneById(frontier()).name}`}
+                </button>
                 <button
-                  className="primary"
-                  data-testid="begin"
-                  onClick={() => {
-                    resetMap();
-                    setHeld([]);
-                    setPicked(1);
-                    press({ t: "march", chapter: 1 });
-                  }}
+                  className="ghost"
+                  type="button"
+                  data-testid="new-game"
+                  onClick={beginFresh}
                 >
                   New game
                 </button>
-                {readHeld().length > 0 && !provinceHeld() && (
-                  <button className="ghost" type="button" onClick={() => press({ t: "march", chapter: frontier() })}>
-                    Continue march · {zoneById(frontier()).name}
-                  </button>
-                )}
                 <button
                   className="ghost"
                   data-testid="map"
@@ -670,6 +676,13 @@ export function Castrum() {
             <div className="end-actions">
               <button className="primary" onClick={() => press({ t: "march", chapter: frontier() })}>
                 {hud.phase === "victory" ? "Next zone" : "March again"}
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={beginFresh}
+              >
+                New game
               </button>
               <button
                 className="ghost"
