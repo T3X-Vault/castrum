@@ -170,7 +170,6 @@ export function Castrum() {
     <div className="castrum" ref={rootRef} data-quiet={hud.fighting ? "true" : "false"}>
       {hud.phase !== "menu" && (
         <header className="hud">
-          <div className="hud-main">
           <div className="readout">
             <span className="readout-bit">
               <span>Denarii</span>
@@ -199,12 +198,11 @@ export function Castrum() {
               </span>
             )}
           </div>
-          <div className="hud-marks">
-            <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={28} height={26} />
-            <img src="/brand/t3x-badge.png" alt="T3X" width={26} height={28} />
-          </div>
-          </div>
           <div className="hud-actions">
+            <div className="hud-marks">
+              <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={36} height={36} />
+              <img src="/brand/t3x-badge.png" alt="T3X" width={34} height={36} />
+            </div>
             {choosing && (
               <button className="ghost horn" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
                 Horn
