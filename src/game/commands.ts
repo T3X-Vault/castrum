@@ -3,6 +3,7 @@ import type { TargetMode, TowerKind } from "./balance";
 export type Command =
   | { t: "start" }
   | { t: "wave" }
+  | { t: "trailer" }
   | { t: "again" }
   | { t: "camp" }
   | { t: "quit" }

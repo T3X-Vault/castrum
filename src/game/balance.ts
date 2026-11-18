@@ -4,9 +4,13 @@ export const ENEMY_KINDS = [
   "dacian",
   "cataphract",
   "berserker",
+  "archer",
+  "slinger",
+  "druid",
   "ram",
   "elephant",
   "warlord",
+  "queen",
 ] as const;
 export type EnemyKind = (typeof ENEMY_KINDS)[number];
 
@@ -140,6 +144,58 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     tags: ["armored", "boss"],
     head: 1.9,
     bob: 0.05,
+    hz: 6,
+  },
+  archer: {
+    name: "Parthian bow",
+    blurb: "She shoots from the reeds and does not wait for the ford.",
+    hp: 46,
+    speed: 1.72,
+    gold: 9,
+    leak: 1,
+    armor: 0,
+    tags: [],
+    head: 1.35,
+    bob: 0.06,
+    hz: 10,
+  },
+  slinger: {
+    name: "Balearic slinger",
+    blurb: "A stone from the ridge, then he is gone.",
+    hp: 38,
+    speed: 1.88,
+    gold: 8,
+    leak: 1,
+    armor: 0,
+    tags: [],
+    head: 1.32,
+    bob: 0.07,
+    hz: 11,
+  },
+  druid: {
+    name: "Grove priest",
+    blurb: "The oaks sent him. He walks as if the road were his.",
+    hp: 260,
+    speed: 1.12,
+    gold: 22,
+    leak: 2,
+    armor: 2,
+    tags: [],
+    head: 1.55,
+    bob: 0.04,
+    hz: 6,
+  },
+  queen: {
+    name: "Queen of the far bank",
+    blurb: "Her banner is the last one. Break it and the host breaks.",
+    hp: 3000,
+    speed: 1.08,
+    gold: 200,
+    leak: 8,
+    armor: 6,
+    tags: ["armored", "boss"],
+    head: 1.85,
+    bob: 0.045,
     hz: 6,
   },
 };
@@ -339,7 +395,7 @@ export const MASONRY: MasonryTier[] = [
 
 export const START_GOLD = 100;
 export const START_FORT = 24;
-export const WAVE_COUNT = 15;
+export const WAVE_COUNT = 24;
 
 export interface WaveGroup {
   kind: EnemyKind;
@@ -515,6 +571,104 @@ const SCRIPTED: WaveDef[] = [
       { kind: "ram", count: 2, interval: 4, delay: 5 },
     ],
     hpScale: 1.22,
+    speedScale: 1.05,
+  },
+  {
+    name: "Parthian rain",
+    blurb: "Bows from the far reeds. They do not need the ford.",
+    groups: [
+      { kind: "archer", count: 10, interval: 0.85, delay: 0.3 },
+      { kind: "raider", count: 8, interval: 0.7, delay: 1.4 },
+    ],
+    hpScale: 1.16,
+    speedScale: 1.04,
+  },
+  {
+    name: "Stones from the ridge",
+    blurb: "The Balearic boys come before the swords.",
+    groups: [
+      { kind: "slinger", count: 12, interval: 0.55, delay: 0.2 },
+      { kind: "gaul", count: 6, interval: 1.2, delay: 2 },
+    ],
+    hpScale: 1.16,
+    speedScale: 1.05,
+  },
+  {
+    name: "The grove walks",
+    blurb: "The oaks send their priests down the causeway.",
+    groups: [
+      { kind: "druid", count: 4, interval: 2.4, delay: 0.6 },
+      { kind: "gaul", count: 8, interval: 1, delay: 0.3 },
+      { kind: "archer", count: 6, interval: 1.1, delay: 3 },
+    ],
+    hpScale: 1.18,
+    speedScale: 1.02,
+  },
+  {
+    name: "The queen's riders",
+    blurb: "Her cavalry has learned the road.",
+    groups: [
+      { kind: "cataphract", count: 6, interval: 1.35, delay: 0.4 },
+      { kind: "archer", count: 8, interval: 0.9, delay: 1 },
+    ],
+    hpScale: 1.18,
+    speedScale: 1.05,
+  },
+  {
+    name: "Her vanguard",
+    blurb: "The standard is seen. She is not on it yet.",
+    groups: [
+      { kind: "dacian", count: 6, interval: 1.2, delay: 0.4 },
+      { kind: "archer", count: 6, interval: 1, delay: 0.8 },
+      { kind: "slinger", count: 8, interval: 0.6, delay: 0.2 },
+    ],
+    hpScale: 1.2,
+    speedScale: 1.04,
+  },
+  {
+    name: "The fire oath",
+    blurb: "They swear to burn the gate before night.",
+    groups: [
+      { kind: "ram", count: 3, interval: 2.6, delay: 0.4 },
+      { kind: "berserker", count: 3, interval: 2.4, delay: 1.2 },
+      { kind: "druid", count: 2, interval: 3, delay: 4 },
+    ],
+    hpScale: 1.2,
+    speedScale: 1.04,
+  },
+  {
+    name: "Both banks",
+    blurb: "The king and the queen share a shore.",
+    groups: [
+      { kind: "elephant", count: 2, interval: 4.5, delay: 1 },
+      { kind: "archer", count: 8, interval: 0.8, delay: 0.3 },
+      { kind: "ram", count: 2, interval: 3.2, delay: 2 },
+    ],
+    hpScale: 1.22,
+    speedScale: 1.05,
+  },
+  {
+    name: "The last light",
+    blurb: "Night comes early. Count no one.",
+    groups: [
+      { kind: "raider", count: 16, interval: 0.4, delay: 0.2 },
+      { kind: "slinger", count: 8, interval: 0.55, delay: 1 },
+      { kind: "druid", count: 3, interval: 2.6, delay: 3 },
+    ],
+    hpScale: 1.22,
+    speedScale: 1.06,
+  },
+  {
+    name: "The queen at the ford",
+    blurb: "Two banners. One gate. She takes the road herself.",
+    groups: [
+      { kind: "queen", count: 1, interval: 1, delay: 7 },
+      { kind: "warlord", count: 1, interval: 1, delay: 3 },
+      { kind: "archer", count: 8, interval: 0.7, delay: 0.3 },
+      { kind: "elephant", count: 1, interval: 1, delay: 1.5 },
+      { kind: "dacian", count: 6, interval: 1.1, delay: 0.5 },
+    ],
+    hpScale: 1.24,
     speedScale: 1.05,
   },
 ];

@@ -38,6 +38,9 @@ export interface HudModel {
   canStart: boolean;
   endless: boolean;
   hint: string;
+  merit: number;
+  meritReady: boolean;
+  reel: string | null;
 }
 
 export const INITIAL_HUD: HudModel = {
@@ -68,6 +71,9 @@ export const INITIAL_HUD: HudModel = {
   canStart: false,
   endless: false,
   hint: "",
+  merit: 0,
+  meritReady: false,
+  reel: null,
 };
 
 let current = INITIAL_HUD;

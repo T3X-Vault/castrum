@@ -556,6 +556,49 @@ export function makeEnemy(kind: EnemyKind) {
       "#a8844a",
     );
     group.name = kind;
+  } else if (kind === "archer") {
+    group = makePerson({
+      cloth: "#6e3b4a",
+      skirt: "#3a2428",
+      hair: "#1a120e",
+      weapon: "bow",
+      cloak: "#6e3b4a",
+      name: kind,
+    });
+  } else if (kind === "slinger") {
+    group = makePerson({
+      cloth: "#c4a574",
+      skirt: "#8a6232",
+      hair: "#efe0a0",
+      weapon: "none",
+      name: kind,
+      k: 0.92,
+    });
+  } else if (kind === "druid") {
+    group = makePerson({
+      cloth: "#3d5a3a",
+      skirt: "#2a3a28",
+      hair: "#d9d0c4",
+      weapon: "spear",
+      cloak: "#243024",
+      beard: true,
+      k: 1.08,
+      name: kind,
+    });
+  } else if (kind === "queen") {
+    group = makePerson({
+      skin: "#c98462",
+      cloth: "#6a2a4a",
+      hair: "#1a120e",
+      metal: "#e3c16e",
+      weapon: "sword",
+      cloak: "#2a1420",
+      helm: true,
+      crest: "#f3e6d0",
+      banner: "#6a2a4a",
+      k: 1.18,
+      name: kind,
+    });
   } else if (kind === "elephant") {
     group = makeElephant();
     group.name = kind;

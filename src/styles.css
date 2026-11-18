@@ -199,6 +199,37 @@
   text-transform: uppercase;
 }
 
+.reel {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  z-index: 4;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(36rem, calc(100% - 2rem));
+  padding: 0;
+  color: var(--color-marble);
+  background: transparent;
+  border: 0;
+  text-align: center;
+  text-shadow: 0 2px 16px rgba(20, 12, 8, 0.85);
+}
+
+.reel span {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  letter-spacing: 0.08em;
+}
+
+.reel small {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-marble-dim);
+}
+
 .readout-bit strong {
   font-family: var(--font-display);
   font-size: 1.05rem;
@@ -439,7 +470,9 @@
   z-index: 4;
   margin: 0;
   padding: 0.28rem 0.6rem;
-  pointer-events: none;
+  font: inherit;
+  color: var(--color-marble);
+  background: color-mix(in oklab, var(--color-ink) 72%, transparent);
   border: 1px solid var(--color-line);
   border-radius: 99px;
   background: color-mix(in oklab, var(--color-ink) 72%, transparent);

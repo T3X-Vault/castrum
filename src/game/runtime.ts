@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   ENEMIES,
+  ENEMY_KINDS,
   MASONRY,
   TOWER_KINDS,
   TOWERS,
@@ -19,7 +20,7 @@ import {
   type TowerKind,
 } from "./balance";
 import { drain, type Command } from "./commands";
-import { clearRun, loadRun, readSlot, saveSlot } from "./records";
+import { clearRun, loadRun, noteWaveCleared, readMerit, readSlot, saveSlot } from "./records";
 import { patchHud, previewLine, type Phase } from "./hud";
 import { makeEnemy, poseRig, tickFigures } from "./figures";
 import {
@@ -67,6 +68,20 @@ const BASE_PITCH = Math.asin(0.95 / Math.hypot(0.1, 0.95, 0.8));
 /** 1 is the framed shot. Above 1 pulls away; phones must not reach the empty-field view. */
 const ZOOM_MIN = 0.62;
 const ZOOM_MAX = 1.12;
+const REEL_LINES: Array<[number, string]> = [
+  [0, "Castrum. Hold the ford."],
+  [4.2, "The far bank is already moving."],
+  [8.4, "Twenty-four hosts. One gate."],
+  [13, "Play. The bar fills. One T3X waits."],
+  [17.5, "The queen takes the road."],
+];
+
+function reelCaption(time: number): string | null {
+  if (time < 0 || time > 21) return null;
+  let line = REEL_LINES[0]![1];
+  for (const [at, text] of REEL_LINES) if (time >= at) line = text;
+  return line;
+}
 const MOVE_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 const MODE_LABEL: Record<TargetMode, string> = {
   first: "First",
@@ -233,6 +248,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
   let panX = 0;
   let panZ = 0;
   let camUser = false;
+  let reel = -1;
   const held = new Set<string>();
   const pointers = new Map<number, { x: number; y: number }>();
   let gesture: { id: number; x: number; y: number; lx: number; ly: number; button: number; dragged: boolean } | null = null;
@@ -315,16 +331,10 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
   function publish() {
     const nextIndex = !state || state.fighting ? state?.wave ?? 1 : state.wave + 1;
     const quiet = state && !state.endless && state.wave >= WAVE_COUNT && !state.fighting;
-    const names = {
-      raider: ENEMIES.raider.name,
-      gaul: ENEMIES.gaul.name,
-      dacian: ENEMIES.dacian.name,
-      cataphract: ENEMIES.cataphract.name,
-      berserker: ENEMIES.berserker.name,
-      ram: ENEMIES.ram.name,
-      elephant: ENEMIES.elephant.name,
-      warlord: ENEMIES.warlord.name,
-    };
+    const names = Object.fromEntries(ENEMY_KINDS.map((kind) => [kind, ENEMIES[kind].name])) as Record<
+      (typeof ENEMY_KINDS)[number],
+      string
+    >;
     const preview = state?.fighting
       ? waveTitle || "The host is on the road."
       : quiet
@@ -336,7 +346,8 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     const next = masonry < 4 ? MASONRY[masonry + 1]! : null;
     const tower = state && selected != null ? state.towers.find((t) => t.pad === selected) : undefined;
     const now = performance.now();
-    const bossE = state?.enemies.find((e) => e.alive && e.kind === "warlord");
+    const bossE = state?.enemies.find((e) => e.alive && ENEMIES[e.kind].tags.includes("boss"));
+    const merit = readMerit();
     patchHud({
       phase,
       gold: state?.gold ?? 100,
@@ -367,7 +378,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         : null,
       preview: preview,
       banner: now < bannerUntil ? banner : "",
-      boss: bossE ? { name: ENEMIES.warlord.name, hp: Math.max(0, bossE.hp), max: bossE.maxHp } : null,
+      boss: bossE ? { name: ENEMIES[bossE.kind].name, hp: Math.max(0, bossE.hp), max: bossE.maxHp } : null,
       speed,
       muted,
       shakeOn,
@@ -375,6 +386,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       canStart: phase === "playing" && !!state && !state.fighting && state.outcome === "play",
       endless: Boolean(state?.endless),
       hint: "",
+      merit: merit.percent,
+      meritReady: merit.percent >= 100 && !merit.claimed,
+      reel: reelCaption(reel),
     });
   }
 
@@ -492,6 +506,12 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       waveTitle = "";
       resetEye();
       say("The ford is yours. Set an engine.");
+      publish();
+      return;
+    }
+    if (command.t === "trailer") {
+      reel = reel >= 0 ? -1 : 0;
+      camUser = false;
       publish();
       return;
     }
@@ -880,6 +900,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         trauma = Math.min(1, trauma + 0.3);
       } else if (ev.type === "clear") {
         playSound("coin");
+        noteWaveCleared();
         say(`The host breaks. +${ev.bounty} denarii`, 2.4);
       } else if (ev.type === "victory") {
         phase = "victory";
@@ -1243,7 +1264,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         const p = enemyPos(e);
         const head = project(p.x, ENEMIES[e.kind].head + 0.18, p.z);
         if (!head) continue;
-        const width = e.kind === "warlord" ? 72 : e.kind === "elephant" ? 52 : 38;
+        const width = ENEMIES[e.kind].tags.includes("boss") ? 72 : e.kind === "elephant" ? 52 : 38;
         const ratio = Math.max(0, e.hp / e.maxHp);
         const y = head.y;
         fx.fillStyle = "rgba(20,14,10,0.78)";
@@ -1294,7 +1315,19 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     intro = Math.min(1, intro + dt * (reduced ? 4 : 0.8));
     slideEye(dt);
     let shot: { orbit: number; panX: number; panZ: number; zoom: number } | undefined;
-    if (phase === "menu" && !camUser) {
+    if (reel >= 0) {
+      reel += dt;
+      if (reel > 21) reel = -1;
+      else {
+        const u = reel / 21;
+        shot = {
+          orbit: Math.sin(u * Math.PI * 2) * 0.65,
+          panX: Math.sin(u * Math.PI) * 2.2,
+          panZ: Math.cos(u * Math.PI) * 1.1,
+          zoom: 0.76 + (1 - Math.sin(u * Math.PI)) * 0.2,
+        };
+      }
+    } else if (phase === "menu" && !camUser) {
       if (reduced) shot = { orbit: 0.22, panX: 1.4, panZ: 0.4, zoom: 0.9 };
       else {
         const u = ((now / 1000) % 16) / 16;

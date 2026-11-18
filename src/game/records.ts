@@ -2,6 +2,9 @@ import type { GameState } from "./sim";
 
 const RUN_KEY = "castrum-run-v1";
 const SCORES_KEY = "castrum-scores-v1";
+const MERIT_KEY = "castrum-merit-v1";
+/** Cleared waves across games. A few full watches fill the bar. */
+export const MERIT_WAVES = 36;
 const SCORE_LIMIT = 20;
 
 export type SavedRun = {
@@ -183,4 +186,45 @@ export function rememberScore(input: { name: string; gloria: number; waves: numb
     return null;
   }
   return row;
+}
+
+export type Merit = { waves: number; claimed: boolean; percent: number };
+
+function meritPercent(waves: number): number {
+  return Math.max(0, Math.min(100, Math.floor((waves / MERIT_WAVES) * 100)));
+}
+
+export function readMerit(): Merit {
+  if (typeof localStorage === "undefined") return { waves: 0, claimed: false, percent: 0 };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MERIT_KEY) ?? "") as Partial<Merit>;
+    const waves = Math.max(0, Math.min(MERIT_WAVES, Math.round(Number(parsed.waves) || 0)));
+    const claimed = Boolean(parsed.claimed);
+    return { waves, claimed, percent: claimed ? 100 : meritPercent(waves) };
+  } catch {
+    return { waves: 0, claimed: false, percent: 0 };
+  }
+}
+
+export function noteWaveCleared(): Merit {
+  const current = readMerit();
+  if (current.claimed || current.waves >= MERIT_WAVES) return current;
+  const next = { waves: current.waves + 1, claimed: false, percent: meritPercent(current.waves + 1) };
+  try {
+    localStorage.setItem(MERIT_KEY, JSON.stringify({ waves: next.waves, claimed: false }));
+  } catch {
+    return current;
+  }
+  return next;
+}
+
+export function markMeritClaimed(): Merit {
+  const current = readMerit();
+  const next = { waves: MERIT_WAVES, claimed: true, percent: 100 };
+  try {
+    localStorage.setItem(MERIT_KEY, JSON.stringify({ waves: MERIT_WAVES, claimed: true }));
+  } catch {
+    return current;
+  }
+  return next;
 }

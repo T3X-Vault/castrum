@@ -23,14 +23,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, type TargetMode, type TowerKind } from "@/game/balance";
+import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, WAVE_COUNT, type TargetMode, type TowerKind } from "@/game/balance";
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
 import { deleteSlot, hasRun, listSlots, loadScores, rememberScore, SLOT_IDS, type ScoreRow, type SlotRecord } from "@/game/records";
 import { WalletDock } from "@/components/WalletDock";
-import { authEnabled, signIn, signOut } from "@/lib/auth/client";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 function XMark() {
   return (
@@ -135,9 +133,6 @@ export function Castrum() {
   const [slots, setSlots] = useState<SlotRecord[]>([]);
   const [slotName, setSlotName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
-  const [xNote, setXNote] = useState("");
-  const [xBusy, setXBusy] = useState(false);
-  const account = useCurrentUserState();
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
@@ -176,21 +171,6 @@ export function Castrum() {
     setSlots(listSlots());
     setSavedRun(hasRun());
   }
-
-  function connectX() {
-    if (!authEnabled) {
-      setXNote("X sign-in is not turned on for this build.");
-      return;
-    }
-    setXBusy(true);
-    setXNote("");
-    void signIn("grok-x", { callbackURL: "/" }).catch((err: unknown) => {
-      setXBusy(false);
-      setXNote(err instanceof Error ? err.message : "X sign-in failed.");
-    });
-  }
-
-  const xAccount = authEnabled && account.user && !account.user.isDevFallback ? account.user : null;
 
   function leaveScore(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -263,7 +243,14 @@ export function Castrum() {
             </span>
             <span className="readout-bit">
               <span>Wave</span>
-              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
+              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/${WAVE_COUNT}`}</strong>
+            </span>
+            <span className="readout-bit merit" title="Cleared waves fill this across a few games. 100% is 1 T3X.">
+              <span>T3X</span>
+              <strong>{hud.merit}%</strong>
+              <span className="gate-bar" aria-hidden="true">
+                <span className="gate-fill" style={{ width: `${hud.merit}%` }} />
+              </span>
             </span>
             {hud.boss && (
               <span className="readout-bit boss">
@@ -410,9 +397,11 @@ export function Castrum() {
         <canvas className="fx" aria-hidden="true" />
         {bootError && <p className="boot-error">{bootError}</p>}
 
-        {hud.phase === "menu" && (
+        {hud.phase === "menu" && !hud.reel && (
           <>
-            <p className="trailer-chip">Trailer</p>
+            <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => press({ t: "trailer" })}>
+              Trailer
+            </button>
             <section className="menu">
               <h1>CASTRUM</h1>
               <div className="lede-row">
@@ -443,28 +432,9 @@ export function Castrum() {
                 <WalletDock />
               </div>
               <div className="socials">
-                {xAccount ? (
-                  <button
-                    className="ghost icon-btn"
-                    type="button"
-                    data-on="true"
-                    aria-label={`Signed in on X as ${xAccount.displayName ?? "your account"}. Sign out.`}
-                    onClick={() => void signOut()}
-                  >
-                    <XMark />
-                  </button>
-                ) : (
-                  <button
-                    className="ghost icon-btn"
-                    type="button"
-                    data-testid="connect-x"
-                    aria-label="Connect X"
-                    disabled={xBusy}
-                    onClick={connectX}
-                  >
-                    <XMark />
-                  </button>
-                )}
+                <button className="ghost icon-btn" type="button" disabled aria-label="X, coming soon">
+                  <XMark />
+                </button>
                 <button className="ghost icon-btn" type="button" disabled aria-label="Facebook, coming soon">
                   <FacebookMark />
                 </button>
@@ -472,11 +442,6 @@ export function Castrum() {
                   <InstagramMark />
                 </button>
               </div>
-              {xNote && (
-                <p className="wallet-note" role="status">
-                  {xNote}
-                </p>
-              )}
               <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
               {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
               {scores.length > 0 && (
@@ -497,6 +462,13 @@ export function Castrum() {
               <p className="credit">Created by Futuret3ch</p>
             </section>
           </>
+        )}
+
+        {hud.reel && (
+          <button className="reel" type="button" onClick={() => press({ t: "trailer" })}>
+            <span>{hud.reel}</span>
+            <small>Tap to close</small>
+          </button>
         )}
 
         {hud.phase === "paused" && (
