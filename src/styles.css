@@ -224,6 +224,19 @@
   letter-spacing: 0.08em;
 }
 
+.trailer-player video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-sm);
+}
+
+.trailer-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
 .reel a,
 .reel button {
   letter-spacing: 0.14em;

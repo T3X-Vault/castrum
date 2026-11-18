@@ -133,6 +133,7 @@ export function Castrum() {
   const [slots, setSlots] = useState<SlotRecord[]>([]);
   const [slotName, setSlotName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [trailerOpen, setTrailerOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
@@ -400,7 +401,7 @@ export function Castrum() {
         {hud.phase === "menu" && !hud.reel && (
           <>
             <div className="trailer-row">
-              <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => press({ t: "trailer" })}>
+              <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => setTrailerOpen(true)}>
                 Trailer
               </button>
               <a className="trailer-chip" href="/trailer.mp4" download="castrum-trailer.mp4">
@@ -469,15 +470,23 @@ export function Castrum() {
           </>
         )}
 
-        {hud.reel && (
-          <div className="reel">
-            <span>{hud.reel}</span>
-            <a href="/trailer.mp4" download="castrum-trailer.mp4">
-              Download
-            </a>
-            <button type="button" onClick={() => press({ t: "trailer" })}>
-              Close
-            </button>
+        {trailerOpen && (
+          <div className="wallet-back" role="presentation" onClick={() => setTrailerOpen(false)}>
+            <div
+              className="wallet-sheet trailer-player"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Castrum trailer"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <video src="/trailer.mp4" controls autoPlay playsInline />
+              <a className="primary" href="/trailer.mp4" download="castrum-trailer.mp4">
+                Download trailer
+              </a>
+              <button type="button" className="text-btn" onClick={() => setTrailerOpen(false)}>
+                Close
+              </button>
+            </div>
           </div>
         )}
 
