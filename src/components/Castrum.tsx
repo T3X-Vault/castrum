@@ -655,7 +655,7 @@ export function Castrum() {
                     <FacebookMark />
                     <span>Facebook</span>
                   </a>
-                  <a className="brand-ig" href="https://www.instagram.com/futuret3ch" target="_blank" rel="noreferrer">
+                  <a className="brand-ig" href="https://www.instagram.com/futuret3chdev" target="_blank" rel="noreferrer">
                     <InstagramMark />
                     <span>Instagram</span>
                   </a>
