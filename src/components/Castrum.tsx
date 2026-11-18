@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type RefObject } from "react";
 import {
   BookOpen,
   Castle,
@@ -6,11 +6,14 @@ import {
   ChevronUp,
   CircleDot,
   Crosshair,
+  Flag,
   Flame,
+  LogOut,
   Maximize,
   Minimize,
   Pause,
   Play,
+  Save,
   Settings,
   Shield,
   Target,
@@ -24,6 +27,8 @@ import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, type TargetMode, ty
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
+import { hasRun, loadScores, rememberScore, type ScoreRow } from "@/game/records";
+import { WalletDock } from "@/components/WalletDock";
 
 const ICONS: Record<TowerKind, typeof Crosshair> = {
   scorpio: Zap,
@@ -95,11 +100,34 @@ export function Castrum() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [armory, setArmory] = useState(true);
   const [gearOpen, setGearOpen] = useState(false);
-  const [linkNote, setLinkNote] = useState<null | "wallet" | "t3x">(null);
+  const [scores, setScores] = useState<ScoreRow[]>([]);
+  const [savedRun, setSavedRun] = useState(false);
+  const [leftName, setLeftName] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const screen = useFullscreen(rootRef);
   const fightingRef = useRef(hud.fighting);
   const choosing = !hud.fighting;
+
+  useEffect(() => {
+    setScores(loadScores());
+    setSavedRun(hasRun());
+    if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
+  }, [hud.phase]);
+
+  function leaveScore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = hud.phase === "victory" ? "victory" : "defeat";
+    if (hud.phase !== "victory" && hud.phase !== "defeat") return;
+    const row = rememberScore({
+      name: String(new FormData(event.currentTarget).get("name") ?? ""),
+      gloria: hud.gloria,
+      waves: hud.cleared,
+      result,
+    });
+    if (!row) return;
+    setLeftName(row.name);
+    setScores(loadScores());
+  }
 
   useEffect(() => {
     const was = fightingRef.current;
@@ -219,8 +247,45 @@ export function Castrum() {
                     }}
                   >
                     <BookOpen size={16} aria-hidden="true" />
-                    Menu
+                    Manual
                   </button>
+                  {inMatch && (
+                    <>
+                      <button
+                        className="ghost"
+                        data-testid="save-run"
+                        onClick={() => {
+                          setGearOpen(false);
+                          press({ t: "save" });
+                        }}
+                      >
+                        <Save size={16} aria-hidden="true" />
+                        Save
+                      </button>
+                      <button
+                        className="ghost danger"
+                        data-testid="surrender"
+                        onClick={() => {
+                          setGearOpen(false);
+                          press({ t: "surrender" });
+                        }}
+                      >
+                        <Flag size={16} aria-hidden="true" />
+                        Surrender
+                      </button>
+                      <button
+                        className="ghost"
+                        data-testid="quit"
+                        onClick={() => {
+                          setGearOpen(false);
+                          press({ t: "quit" });
+                        }}
+                      >
+                        <LogOut size={16} aria-hidden="true" />
+                        Quit
+                      </button>
+                    </>
+                  )}
                   <button className="ghost" onClick={() => press({ t: "speed" })}>
                     Speed ×{hud.speed}
                   </button>
@@ -264,38 +329,41 @@ export function Castrum() {
           <>
             <p className="trailer-chip">Trailer</p>
             <section className="menu">
+              <div className="marks">
+                <img src="/brand/futuret3ch-mark.png" alt="" width={72} height={66} />
+                <p>Supported by Futuret3ch</p>
+                <img className="t3x-badge" src="/brand/t3x-badge.png" alt="T3X" width={64} height={68} />
+              </div>
               <h1>CASTRUM</h1>
               <p className="lede">Hold the ford.</p>
               <div className="menu-actions">
                 <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
                   Start game
                 </button>
-                <button
-                  className="ghost"
-                  aria-pressed={linkNote === "wallet"}
-                  onClick={() => setLinkNote((note) => (note === "wallet" ? null : "wallet"))}
-                >
-                  Connect wallet
-                </button>
-                <button
-                  className="ghost"
-                  aria-pressed={linkNote === "t3x"}
-                  onClick={() => setLinkNote((note) => (note === "t3x" ? null : "t3x"))}
-                >
-                  T3X
-                </button>
+                {savedRun && (
+                  <button className="ghost" data-testid="continue" onClick={() => press({ t: "continue" })}>
+                    Continue
+                  </button>
+                )}
+                <WalletDock />
               </div>
-              {linkNote === "wallet" && (
-                <p className="unwired" role="status">
-                  No wallet is connected. This game does not sign in to one.
-                </p>
-              )}
-              {linkNote === "t3x" && (
-                <p className="unwired" role="status">
-                  T3X is not connected in this build.
-                </p>
-              )}
+              <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
               {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
+              {scores.length > 0 && (
+                <>
+                  <p className="board-label">Scores</p>
+                  <ol className="board">
+                    {scores.slice(0, 5).map((row) => (
+                      <li key={`${row.at}-${row.name}`}>
+                        <span>{row.name}</span>
+                        <span>
+                          {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
               <p className="credit">Created by Futuret3ch</p>
             </section>
           </>
@@ -314,12 +382,44 @@ export function Castrum() {
 
         {(hud.phase === "victory" || hud.phase === "defeat") && (
           <section className="endcard">
-            <p className="eyebrow">{hud.phase === "victory" ? "The ford holds" : "The gate is broken"}</p>
+            <p className="eyebrow">
+              {hud.phase === "victory" ? "The ford holds" : hud.fort > 0 ? "The legion yields" : "The gate is broken"}
+            </p>
             <h2>{hud.phase === "victory" ? "ROME REMEMBERS" : "FALL BACK"}</h2>
             <p className="lede">
               Gloria {hud.gloria}. Waves held {hud.cleared}. Kills {hud.kills}. Gate {hud.fort}.
             </p>
             <p className="best">Best gloria {hud.best}</p>
+            {leftName ? (
+              <p className="wallet-note" role="status">
+                Left under {leftName}.
+              </p>
+            ) : (
+              <form className="score-form" onSubmit={leaveScore}>
+                <label className="sr" htmlFor="score-name">
+                  Name
+                </label>
+                <input id="score-name" name="name" maxLength={18} required placeholder="Your name" autoComplete="nickname" />
+                <button className="primary" type="submit" data-testid="leave-score">
+                  Leave a score
+                </button>
+              </form>
+            )}
+            <p className="board-label">Scores</p>
+            {scores.length === 0 ? (
+              <p className="wallet-note">No scores on this device yet.</p>
+            ) : (
+              <ol className="board">
+                {scores.slice(0, 8).map((row) => (
+                  <li key={`${row.at}-${row.name}`}>
+                    <span>{row.name}</span>
+                    <span>
+                      {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
             <div className="end-actions">
               <button className="primary" onClick={() => press({ t: "again" })}>
                 March again
@@ -347,8 +447,8 @@ export function Castrum() {
             <p>
               Engines shoot whoever is furthest down the road unless you change their aim. First protects the gate.
               Stones and oil punish armor, rams, and elephants. The engines tray is open while you choose, and it folds
-              away when the horn sounds. Engines brings it back. Pause, sound, vibration, speed, and the walls live
-              under the cog. Drag to orbit the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R
+              away when the horn sounds. Engines brings it back. Pause, sound, vibration, the manual, save, surrender,
+              quit, speed, and the walls live under the cog. Drag to orbit the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R
               resets the eye. WASD and the arrows move the view. Keys: 1–6 arm an engine, Space calls the host, U
               improves the selected engine, M raises the fort, T cycles aim, Q changes speed, Esc pauses.
             </p>

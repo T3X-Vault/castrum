@@ -19,6 +19,7 @@ import {
   type TowerKind,
 } from "./balance";
 import { drain, type Command } from "./commands";
+import { clearRun, loadRun, writeRun } from "./records";
 import { patchHud, previewLine, type Phase } from "./hud";
 import { makeEnemy, poseRig, tickFigures } from "./figures";
 import {
@@ -421,7 +422,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       publish();
       return;
     }
-    if (command.t === "camp") {
+    if (command.t === "camp" || command.t === "quit") {
       clearPlay();
       state = null;
       phase = "menu";
@@ -437,7 +438,45 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       publish();
       return;
     }
+    if (command.t === "save") {
+      if (!state || state.outcome !== "play" || (phase !== "playing" && phase !== "paused")) return;
+      writeRun({ version: 1, state, speed, paused: phase === "paused" });
+      say("The run is kept on this device.");
+      publish();
+      return;
+    }
+    if (command.t === "surrender") {
+      if (!state || state.outcome !== "play" || (phase !== "playing" && phase !== "paused")) return;
+      state.outcome = "defeat";
+      state.fighting = false;
+      phase = "defeat";
+      clearRun();
+      playSound("lose");
+      noteBest();
+      say("The legion yields.");
+      publish();
+      return;
+    }
+    if (command.t === "continue") {
+      const run = loadRun();
+      if (!run) return;
+      clearPlay();
+      state = run.state;
+      phase = run.paused ? "paused" : "playing";
+      speed = run.speed;
+      selected = null;
+      armed = null;
+      diorama.visible = false;
+      applyMasonry(state.masonry, true);
+      intro = 1;
+      waveTitle = "";
+      resetEye();
+      say("The saved watch resumes.");
+      publish();
+      return;
+    }
     if (command.t === "start" || command.t === "again") {
+      clearRun();
       clearPlay();
       state = createState();
       phase = "playing";
@@ -841,11 +880,13 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         say(`The host breaks. +${ev.bounty} denarii`, 2.4);
       } else if (ev.type === "victory") {
         phase = "victory";
+        clearRun();
         playSound("win");
         noteBest();
         say("The ford holds.");
       } else if (ev.type === "defeat") {
         phase = "defeat";
+        clearRun();
         playSound("lose");
         noteBest();
         say("The gate is broken.");

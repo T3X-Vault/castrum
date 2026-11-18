@@ -5,6 +5,10 @@ export type Command =
   | { t: "wave" }
   | { t: "again" }
   | { t: "camp" }
+  | { t: "quit" }
+  | { t: "surrender" }
+  | { t: "save" }
+  | { t: "continue" }
   | { t: "endless" }
   | { t: "pause" }
   | { t: "speed" }
