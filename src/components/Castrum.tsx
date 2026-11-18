@@ -400,14 +400,9 @@ export function Castrum() {
 
         {hud.phase === "menu" && !hud.reel && (
           <>
-            <div className="trailer-row">
-              <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => setTrailerOpen(true)}>
-                Trailer
-              </button>
-              <a className="trailer-chip" href="/trailer.mp4" download="castrum-trailer.mp4">
-                Download
-              </a>
-            </div>
+            <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => setTrailerOpen(true)}>
+              Trailer
+            </button>
             <section className="menu">
               <h1>CASTRUM</h1>
               <div className="lede-row">
@@ -479,10 +474,7 @@ export function Castrum() {
               aria-label="Castrum trailer"
               onClick={(event) => event.stopPropagation()}
             >
-              <video src="/trailer.mp4" controls autoPlay playsInline />
-              <a className="primary" href="/trailer.mp4" download="castrum-trailer.mp4">
-                Download trailer
-              </a>
+              <video src="/trailer.mp4" controls controlsList="nodownload" autoPlay playsInline />
               <button type="button" className="text-btn" onClick={() => setTrailerOpen(false)}>
                 Close
               </button>

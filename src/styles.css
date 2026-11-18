@@ -483,16 +483,11 @@
   justify-content: center;
 }
 
-.trailer-row {
+.trailer-chip {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 4;
-  display: flex;
-  gap: 0.4rem;
-}
-
-.trailer-chip {
   margin: 0;
   padding: 0.28rem 0.6rem;
   text-decoration: none;
