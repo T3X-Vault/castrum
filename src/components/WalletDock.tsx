@@ -4,11 +4,11 @@ import { Wallet } from "lucide-react";
 import {
   connectSolana,
   disconnectSolana,
-  infiniteWalletLink,
   insideWalletApp,
   listSolanaWallets,
   mobileWalletLink,
   MOBILE_WALLETS,
+  T3X_VAULT_URL,
   type SolanaWallet,
 } from "@/lib/wallet/solana";
 import { readSession, shortAddress, writeSession, type WalletSession } from "@/lib/wallet/session";
@@ -22,7 +22,6 @@ function onPhone(): boolean {
 export function WalletDock() {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState(false);
-  const [pair, setPair] = useState("");
   const [linked, setLinked] = useState<WalletSession | null>(null);
   const [wallets, setWallets] = useState<SolanaWallet[]>([]);
   const [inside, setInside] = useState<string | null>(null);
@@ -32,7 +31,6 @@ export function WalletDock() {
 
   useEffect(() => {
     setPhone(onPhone());
-    setPair(crypto.randomUUID());
     setLinked(readSession());
     setWallets(listSolanaWallets());
     setInside(insideWalletApp());
@@ -128,8 +126,8 @@ export function WalletDock() {
                 Open {app.name}
               </a>
             ))}
-            <a className="ghost" href={pair ? infiniteWalletLink(pair) : "#"}>
-              Open Infinite Wallet
+            <a className="ghost" href={T3X_VAULT_URL} target="_blank" rel="noreferrer">
+              Open T3x Vault
             </a>
           </div>
         )}

@@ -43,9 +43,7 @@ export const MOBILE_WALLETS: MobileWalletApp[] = [
   { id: "backpack", name: "Backpack" },
 ];
 
-export function infiniteWalletLink(session: string): string {
-  return `https://mt.futuret3ch.com.au/?connect=castrum&session=${encodeURIComponent(session)}`;
-}
+export const T3X_VAULT_URL = "https://t3x-wallet.vercel.app/";
 
 export function insideWalletApp(): MobileWalletApp["id"] | null {
   if (typeof window === "undefined") return null;
