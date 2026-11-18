@@ -1,16 +1,25 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type RefObject } from "react";
 import {
   BookOpen,
   Castle,
+  ChevronDown,
+  ChevronUp,
   CircleDot,
   Crosshair,
+  Flag,
   Flame,
+  LogOut,
+  Maximize,
+  Minimize,
   Pause,
   Play,
+  Save,
+  Settings,
   Shield,
   Target,
   Volume2,
   VolumeX,
+  Vibrate,
   X,
   Zap,
 } from "lucide-react";
@@ -18,6 +27,36 @@ import { ENEMIES, ENEMY_KINDS, MASONRY, TOWER_KINDS, TOWERS, type TargetMode, ty
 import { unlockAudio } from "@/game/audio";
 import { send, type Command } from "@/game/commands";
 import { getHud, subscribeHud } from "@/game/hud";
+import { deleteSlot, hasRun, listSlots, loadScores, rememberScore, SLOT_IDS, type ScoreRow, type SlotRecord } from "@/game/records";
+import { WalletDock } from "@/components/WalletDock";
+import { authEnabled, signIn, signOut } from "@/lib/auth/client";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+
+function XMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+    </svg>
+  );
+}
+
+function FacebookMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14.5 8.5V6.8c0-.7.5-1.1 1.2-1.1H17V3h-2.1C12.2 3 11 4.4 11 6.6v1.9H9v2.8h2V21h3.1v-9.7h2.2l.4-2.8h-2.6z" />
+    </svg>
+  );
+}
+
+function InstagramMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="17.2" cy="6.8" r="1" />
+    </svg>
+  );
+}
 
 const ICONS: Record<TowerKind, typeof Crosshair> = {
   scorpio: Zap,
@@ -45,9 +84,136 @@ function press(command: Command) {
   send(command);
 }
 
+type FullscreenEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FullscreenDoc = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+function useFullscreen(root: RefObject<HTMLElement | null>) {
+  const [active, setActive] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    const doc = document as FullscreenDoc;
+    const el = document.documentElement as FullscreenEl;
+    setSupported(Boolean(el.requestFullscreen || el.webkitRequestFullscreen));
+    const sync = () => setActive(Boolean(document.fullscreenElement || doc.webkitFullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  const toggle = () => {
+    const doc = document as FullscreenDoc;
+    const current = document.fullscreenElement || doc.webkitFullscreenElement;
+    if (current) {
+      const exit = document.exitFullscreen?.bind(document) ?? doc.webkitExitFullscreen?.bind(doc);
+      void exit?.();
+      return;
+    }
+    const el = (root.current ?? document.documentElement) as FullscreenEl;
+    const enter = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
+    void Promise.resolve(enter?.()).catch(() => undefined);
+  };
+
+  return { active, supported, toggle };
+}
+
 export function Castrum() {
   const hud = useHud();
   const [bootError, setBootError] = useState<string | null>(null);
+  const [armory, setArmory] = useState(true);
+  const [gearOpen, setGearOpen] = useState(false);
+  const [scores, setScores] = useState<ScoreRow[]>([]);
+  const [savedRun, setSavedRun] = useState(false);
+  const [leftName, setLeftName] = useState("");
+  const [slotsOpen, setSlotsOpen] = useState<null | "play" | "camp">(null);
+  const [slots, setSlots] = useState<SlotRecord[]>([]);
+  const [slotName, setSlotName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [xNote, setXNote] = useState("");
+  const [xBusy, setXBusy] = useState(false);
+  const account = useCurrentUserState();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const screen = useFullscreen(rootRef);
+  const fightingRef = useRef(hud.fighting);
+  const choosing = !hud.fighting;
+
+  useEffect(() => {
+    setScores(loadScores());
+    setSavedRun(hasRun());
+    if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
+  }, [hud.phase]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const pin = () => {
+      const view = window.visualViewport;
+      if (!view) return;
+      root.style.top = `${view.offsetTop}px`;
+      root.style.left = `${view.offsetLeft}px`;
+      root.style.width = `${view.width}px`;
+      root.style.height = `${view.height}px`;
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    pin();
+    window.visualViewport?.addEventListener("resize", pin);
+    window.visualViewport?.addEventListener("scroll", pin);
+    window.addEventListener("orientationchange", pin);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", pin);
+      window.visualViewport?.removeEventListener("scroll", pin);
+      window.removeEventListener("orientationchange", pin);
+    };
+  }, []);
+
+  function refreshSlots() {
+    setSlots(listSlots());
+    setSavedRun(hasRun());
+  }
+
+  function connectX() {
+    if (!authEnabled) {
+      setXNote("X sign-in is not turned on for this build.");
+      return;
+    }
+    setXBusy(true);
+    setXNote("");
+    void signIn("grok-x", { callbackURL: "/" }).catch((err: unknown) => {
+      setXBusy(false);
+      setXNote(err instanceof Error ? err.message : "X sign-in failed.");
+    });
+  }
+
+  const xAccount = authEnabled && account.user && !account.user.isDevFallback ? account.user : null;
+
+  function leaveScore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = hud.phase === "victory" ? "victory" : "defeat";
+    if (hud.phase !== "victory" && hud.phase !== "defeat") return;
+    const row = rememberScore({
+      name: String(new FormData(event.currentTarget).get("name") ?? ""),
+      gloria: hud.gloria,
+      waves: hud.cleared,
+      result,
+    });
+    if (!row) return;
+    setLeftName(row.name);
+    setScores(loadScores());
+  }
+
+  useEffect(() => {
+    const was = fightingRef.current;
+    fightingRef.current = hud.fighting;
+    if (hud.phase !== "playing" && hud.phase !== "paused") return;
+    if (hud.fighting && !was) setArmory(false);
+    else if (!hud.fighting && was) setArmory(true);
+  }, [hud.fighting, hud.phase]);
 
   useEffect(() => {
     const gl = document.querySelector<HTMLCanvasElement>("canvas.gl");
@@ -75,101 +241,262 @@ export function Castrum() {
   }, []);
 
   const gatePct = hud.fortMax > 0 ? Math.max(0, Math.min(100, (hud.fort / hud.fortMax) * 100)) : 0;
-  const showDock = hud.phase === "playing" || hud.phase === "paused";
+  const inMatch = hud.phase === "playing" || hud.phase === "paused";
+  const showShop = inMatch && armory;
 
   return (
-    <div className="castrum">
+    <div className="castrum" ref={rootRef} data-quiet={hud.fighting ? "true" : "false"}>
       {hud.phase !== "menu" && (
         <header className="hud">
-          <div className="brand">
-            <span className="eyebrow">Legio IX</span>
-            <span className="word">CASTRUM</span>
-          </div>
-          <div className="stat">
-            <span>Denarii</span>
-            <strong className="bump" key={hud.gold}>
-              {hud.gold}
-            </strong>
-          </div>
-          <div className="stat gate">
-            <span>Gate {hud.fort}</span>
-            <div className="gate-bar" aria-hidden="true">
-              <span className="gate-fill" style={{ width: `${gatePct}%` }} />
-            </div>
-          </div>
-          <div className="stat">
-            <span>Wave</span>
-            <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
-          </div>
-          {hud.boss && (
-            <div className="stat boss">
-              <span>
-                {hud.boss.name} {Math.ceil(hud.boss.hp)}
+          <div className="readout">
+            <span className="readout-bit">
+              <span>Denarii</span>
+              <strong className="bump" key={hud.gold}>
+                {hud.gold}
+              </strong>
+            </span>
+            <span className="readout-bit gate">
+              <span>Gate {hud.fort}</span>
+              <span className="gate-bar" aria-hidden="true">
+                <span className="gate-fill" style={{ width: `${gatePct}%` }} />
               </span>
-              <div className="gate-bar">
-                <span className="gate-fill" style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.max) * 100)}%` }} />
-              </div>
-            </div>
-          )}
+            </span>
+            <span className="readout-bit">
+              <span>Wave</span>
+              <strong>{hud.wave === 0 ? "—" : hud.endless ? String(hud.wave) : `${hud.wave}/15`}</strong>
+            </span>
+            {hud.boss && (
+              <span className="readout-bit boss">
+                <span>
+                  {hud.boss.name} {Math.ceil(hud.boss.hp)}
+                </span>
+                <span className="gate-bar">
+                  <span className="gate-fill" style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.max) * 100)}%` }} />
+                </span>
+              </span>
+            )}
+          </div>
           <div className="hud-actions">
-            <button className="primary" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
-              {hud.fighting ? "Host on the road" : "Sound the bucina"}
-            </button>
-            <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
-              <Castle size={16} aria-hidden="true" /> {hud.masonryNext ?? "Castrum complete"}
-              {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
-            </button>
-            <button className="icon-btn" onClick={() => press({ t: "speed" })} aria-label={`Speed times ${hud.speed}`}>
-              ×{hud.speed}
-            </button>
-            <button
-              className="icon-btn"
-              onClick={() => press({ t: "pause" })}
-              aria-label={hud.phase === "paused" ? "Resume" : "Pause"}
-            >
-              {hud.phase === "paused" ? <Play size={18} /> : <Pause size={18} />}
-            </button>
-            <button
-              className="icon-btn"
-              data-on={hud.muted ? "true" : "false"}
-              onClick={() => press({ t: "mute" })}
-              aria-label={hud.muted ? "Unmute" : "Mute"}
-            >
-              {hud.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
-            <button className="icon-btn" onClick={() => press({ t: "manual", open: true })} aria-label="Field manual">
-              <BookOpen size={18} />
-            </button>
+            <div className="hud-marks">
+              <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={36} height={36} />
+              <img src="/brand/t3x-badge.png" alt="T3X" width={34} height={36} />
+            </div>
+            {choosing && (
+              <button className="ghost horn" disabled={!hud.canStart} onClick={() => press({ t: "wave" })}>
+                Horn
+              </button>
+            )}
+            {inMatch && (
+              <button
+                className="ghost tray"
+                data-on={armory ? "true" : "false"}
+                aria-pressed={armory}
+                onClick={() => setArmory((open) => !open)}
+              >
+                {armory ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronUp size={16} aria-hidden="true" />}
+                Engines
+              </button>
+            )}
+            <div className="gear">
+              <button
+                className="icon-btn"
+                data-on={gearOpen ? "true" : "false"}
+                aria-expanded={gearOpen}
+                aria-label="Settings"
+                onClick={() => setGearOpen((open) => !open)}
+              >
+                <Settings size={18} />
+              </button>
+              {gearOpen && (
+                <div className="gear-panel" role="group" aria-label="Settings">
+                  <button className="ghost" onClick={() => press({ t: "pause" })}>
+                    {hud.phase === "paused" ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
+                    {hud.phase === "paused" ? "Resume" : "Pause"}
+                  </button>
+                  <button className="ghost" data-on={hud.muted ? "false" : "true"} onClick={() => press({ t: "mute" })}>
+                    {hud.muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+                    {hud.muted ? "Sound off" : "Sound on"}
+                  </button>
+                  <button className="ghost" data-on={hud.shakeOn ? "true" : "false"} onClick={() => press({ t: "shake" })}>
+                    <Vibrate size={16} aria-hidden="true" />
+                    {hud.shakeOn ? "Vibration on" : "Vibration off"}
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      setGearOpen(false);
+                      press({ t: "manual", open: true });
+                    }}
+                  >
+                    <BookOpen size={16} aria-hidden="true" />
+                    Manual
+                  </button>
+                  {inMatch && (
+                    <>
+                      <button
+                        className="ghost"
+                        data-testid="save-run"
+                        onClick={() => {
+                          setGearOpen(false);
+                          setSlotName("");
+                          setPendingDelete(null);
+                          setSlots(listSlots());
+                          setSlotsOpen("play");
+                        }}
+                      >
+                        <Save size={16} aria-hidden="true" />
+                        Save
+                      </button>
+                      <button
+                        className="ghost danger"
+                        data-testid="surrender"
+                        onClick={() => {
+                          setGearOpen(false);
+                          press({ t: "surrender" });
+                        }}
+                      >
+                        <Flag size={16} aria-hidden="true" />
+                        Surrender
+                      </button>
+                      <button
+                        className="ghost"
+                        data-testid="quit"
+                        onClick={() => {
+                          setGearOpen(false);
+                          press({ t: "quit" });
+                        }}
+                      >
+                        <LogOut size={16} aria-hidden="true" />
+                        Quit
+                      </button>
+                    </>
+                  )}
+                  <button className="ghost" onClick={() => press({ t: "speed" })}>
+                    Speed ×{hud.speed}
+                  </button>
+                  <button className="ghost" onClick={() => press({ t: "masonry" })} disabled={hud.masonryCost == null}>
+                    <Castle size={16} aria-hidden="true" />
+                    {hud.masonryNext ?? "Walls complete"}
+                    {hud.masonryCost != null ? ` · ${hud.masonryCost}` : ""}
+                  </button>
+                  {screen.supported && (
+                    <button className="ghost" onClick={screen.toggle}>
+                      {screen.active ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}
+                      {screen.active ? "Leave fullscreen" : "Fill the screen"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </header>
+      )}
+
+      {hud.phase !== "menu" && hud.banner && (
+        <button
+          type="button"
+          className="banner"
+          data-hot={hud.fighting ? "true" : "false"}
+          onClick={() => press({ t: "dismiss" })}
+          aria-label={`Dismiss announcement: ${hud.banner}`}
+        >
+          <span>{hud.banner}</span>
+          <X size={16} aria-hidden="true" />
+        </button>
       )}
 
       <div className="stage">
         <canvas className="gl" aria-label="Roman battlefield" />
         <canvas className="fx" aria-hidden="true" />
-        {hud.phase !== "menu" && <div className="banner">{hud.banner}</div>}
         {bootError && <p className="boot-error">{bootError}</p>}
 
         {hud.phase === "menu" && (
-          <section className="menu">
-            <p className="eyebrow">Legio IX Hispana</p>
-            <h1>CASTRUM</h1>
-            <p className="lede">Build the fort. Hold the ford. The far bank is already moving.</p>
-            <ol className="steps">
-              <li>Choose an engine and set it on a stone pad.</li>
-              <li>Raise the castrum — click the fort, or the masonry order.</li>
-              <li>Drag the field to look around. WASD or arrows slide. Scroll zooms. R resets.</li>
-            </ol>
-            <div className="menu-actions">
-              <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
-                Take command
-              </button>
-              <button className="ghost" onClick={() => press({ t: "manual", open: true })}>
-                Field manual
-              </button>
-            </div>
-            {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
-          </section>
+          <>
+            <p className="trailer-chip">Trailer</p>
+            <section className="menu">
+              <h1>CASTRUM</h1>
+              <div className="lede-row">
+                <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={44} height={40} />
+                <img src="/brand/t3x-badge.png" alt="T3X" width={40} height={42} />
+                <p className="lede">Hold the ford.</p>
+              </div>
+              <div className="menu-actions">
+                <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
+                  Start game
+                </button>
+                {savedRun && (
+                  <button className="ghost" data-testid="continue" onClick={() => press({ t: "continue" })}>
+                    Continue
+                  </button>
+                )}
+                <button
+                  className="ghost"
+                  data-testid="slots"
+                  onClick={() => {
+                    setPendingDelete(null);
+                    refreshSlots();
+                    setSlotsOpen("camp");
+                  }}
+                >
+                  Slots
+                </button>
+                <WalletDock />
+              </div>
+              <div className="socials">
+                {xAccount ? (
+                  <button
+                    className="ghost icon-btn"
+                    type="button"
+                    data-on="true"
+                    aria-label={`Signed in on X as ${xAccount.displayName ?? "your account"}. Sign out.`}
+                    onClick={() => void signOut()}
+                  >
+                    <XMark />
+                  </button>
+                ) : (
+                  <button
+                    className="ghost icon-btn"
+                    type="button"
+                    data-testid="connect-x"
+                    aria-label="Connect X"
+                    disabled={xBusy}
+                    onClick={connectX}
+                  >
+                    <XMark />
+                  </button>
+                )}
+                <button className="ghost icon-btn" type="button" disabled aria-label="Facebook, coming soon">
+                  <FacebookMark />
+                </button>
+                <button className="ghost icon-btn" type="button" disabled aria-label="Instagram, coming soon">
+                  <InstagramMark />
+                </button>
+              </div>
+              {xNote && (
+                <p className="wallet-note" role="status">
+                  {xNote}
+                </p>
+              )}
+              <p className="wallet-note">Solana wallets only. Connect is accepted when the wallet holds T3X. Otherwise buy it first.</p>
+              {hud.best > 0 && <p className="best">Best gloria {hud.best}</p>}
+              {scores.length > 0 && (
+                <>
+                  <p className="board-label">Scores</p>
+                  <ol className="board">
+                    {scores.slice(0, 5).map((row) => (
+                      <li key={`${row.at}-${row.name}`}>
+                        <span>{row.name}</span>
+                        <span>
+                          {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+              <p className="credit">Created by Futuret3ch</p>
+            </section>
+          </>
         )}
 
         {hud.phase === "paused" && (
@@ -185,12 +512,44 @@ export function Castrum() {
 
         {(hud.phase === "victory" || hud.phase === "defeat") && (
           <section className="endcard">
-            <p className="eyebrow">{hud.phase === "victory" ? "The ford holds" : "The gate is broken"}</p>
+            <p className="eyebrow">
+              {hud.phase === "victory" ? "The ford holds" : hud.fort > 0 ? "The legion yields" : "The gate is broken"}
+            </p>
             <h2>{hud.phase === "victory" ? "ROME REMEMBERS" : "FALL BACK"}</h2>
             <p className="lede">
               Gloria {hud.gloria}. Waves held {hud.cleared}. Kills {hud.kills}. Gate {hud.fort}.
             </p>
             <p className="best">Best gloria {hud.best}</p>
+            {leftName ? (
+              <p className="wallet-note" role="status">
+                Left under {leftName}.
+              </p>
+            ) : (
+              <form className="score-form" onSubmit={leaveScore}>
+                <label className="sr" htmlFor="score-name">
+                  Name
+                </label>
+                <input id="score-name" name="name" maxLength={18} required placeholder="Your name" autoComplete="nickname" />
+                <button className="primary" type="submit" data-testid="leave-score">
+                  Leave a score
+                </button>
+              </form>
+            )}
+            <p className="board-label">Scores</p>
+            {scores.length === 0 ? (
+              <p className="wallet-note">No scores on this device yet.</p>
+            ) : (
+              <ol className="board">
+                {scores.slice(0, 8).map((row) => (
+                  <li key={`${row.at}-${row.name}`}>
+                    <span>{row.name}</span>
+                    <span>
+                      {row.gloria.toLocaleString()} · {row.result === "victory" ? "held" : "fell"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
             <div className="end-actions">
               <button className="primary" onClick={() => press({ t: "again" })}>
                 March again
@@ -217,10 +576,11 @@ export function Castrum() {
             </header>
             <p>
               Engines shoot whoever is furthest down the road unless you change their aim. First protects the gate.
-              Stones and oil punish armor, rams, and elephants. Drag to orbit the field, right-drag or Shift-drag to
-              slide, scroll or pinch to zoom, R resets the eye. WASD and the arrows move the view. Keys: 1–6 arm an
-              engine, Space calls the host, U improves the selected engine, M raises the fort, T cycles aim, Q changes
-              speed, Esc pauses.
+              Stones and oil punish armor, rams, and elephants. The engines tray is open while you choose, and it folds
+              away when the horn sounds. Engines brings it back. Pause, sound, vibration, the manual, save, surrender,
+              quit, speed, and the walls live under the cog. Drag to orbit the field, right-drag or Shift-drag to slide, scroll or pinch to zoom, R
+              resets the eye. WASD and the arrows move the view. Keys: 1–6 arm an engine, Space calls the host, U
+              improves the selected engine, M raises the fort, T cycles aim, Q changes speed, Esc pauses.
             </p>
             <div className="manual-grid">
               {TOWER_KINDS.map((kind) => {
@@ -257,7 +617,7 @@ export function Castrum() {
         )}
       </div>
 
-      {showDock && (
+      {showShop && (
         <footer className="dock">
           {hud.selected && (
             <div className="inspector">
@@ -285,32 +645,141 @@ export function Castrum() {
               </button>
             </div>
           )}
-          <p className="dock-note">{hud.preview}</p>
-          <div className="cards">
-            {TOWER_KINDS.map((kind) => {
-              const tower = TOWERS[kind];
-              const Icon = ICONS[kind];
-              const poor = hud.gold < tower.cost;
-              return (
-                <button
-                  key={kind}
-                  className="tcard"
-                  data-on={hud.armed === kind ? "true" : "false"}
-                  data-poor={poor && hud.armed !== kind ? "true" : "false"}
-                  onClick={() => press({ t: "arm", kind })}
-                >
-                  <span className="top">
-                    <Icon size={16} aria-hidden="true" />
-                    <span className="pip" style={{ ["--pip" as string]: tower.pennant }} />
-                    <span className="kbd">{tower.hotkey}</span>
-                  </span>
-                  <b>{tower.name}</b>
-                  <span className="meta">{tower.cost} denarii</span>
-                </button>
-              );
-            })}
-          </div>
+          {showShop && (
+            <>
+              <p className="dock-note">{hud.preview}</p>
+              <div className="cards">
+                {TOWER_KINDS.map((kind) => {
+                  const tower = TOWERS[kind];
+                  const Icon = ICONS[kind];
+                  const poor = hud.gold < tower.cost;
+                  return (
+                    <button
+                      key={kind}
+                      className="tcard"
+                      data-on={hud.armed === kind ? "true" : "false"}
+                      data-poor={poor && hud.armed !== kind ? "true" : "false"}
+                      onClick={() => press({ t: "arm", kind })}
+                    >
+                      <span className="top">
+                        <Icon size={16} aria-hidden="true" />
+                        <span className="pip" style={{ ["--pip" as string]: tower.pennant }} />
+                        <span className="kbd">{tower.hotkey}</span>
+                      </span>
+                      <b>{tower.name}</b>
+                      <span className="meta">{tower.cost} denarii</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </footer>
+      )}
+      {slotsOpen && (
+        <div className="wallet-back" role="presentation" onClick={() => setSlotsOpen(null)}>
+          <div
+            className="wallet-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slot-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">This device</p>
+            <h2 id="slot-title">{slotsOpen === "play" ? "Keep this fight" : "Saved slots"}</h2>
+            <p>Four slots stay on this device. Load brings that fight back. Delete removes only that slot.</p>
+            {slotsOpen === "play" && (
+              <label className="slot-name">
+                Name
+                <input
+                  value={slotName}
+                  maxLength={18}
+                  placeholder="Legion"
+                  onChange={(event) => setSlotName(event.target.value)}
+                />
+              </label>
+            )}
+            <ul className="slot-list">
+              {SLOT_IDS.map((id) => {
+                const row = slots.find((slot) => slot.id === id);
+                return (
+                  <li key={id}>
+                    <div>
+                      <b>Slot {id}</b>
+                      <span>{row ? `${row.name} · wave ${row.run.state.wave}` : "Empty"}</span>
+                    </div>
+                    <div className="slot-actions">
+                      {slotsOpen === "play" && (
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid={`save-slot-${id}`}
+                          onClick={() => {
+                            const name = slotName.trim() || row?.name || `Slot ${id}`;
+                            press({ t: "save", slot: id, name });
+                            let tries = 0;
+                            const tick = () => {
+                              refreshSlots();
+                              tries += 1;
+                              if (tries < 8 && !listSlots().some((slot) => slot.id === id && slot.name === name.slice(0, 18))) {
+                                window.setTimeout(tick, 50);
+                              }
+                            };
+                            window.setTimeout(tick, 30);
+                          }}
+                        >
+                          {row ? "Overwrite" : "Save"}
+                        </button>
+                      )}
+                      {row && (
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid={`load-slot-${id}`}
+                          onClick={() => {
+                            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+                            window.scrollTo(0, 0);
+                            setSlotsOpen(null);
+                            press({ t: "continue", slot: id });
+                          }}
+                        >
+                          Load
+                        </button>
+                      )}
+                      {row && pendingDelete !== id && (
+                        <button
+                          type="button"
+                          className="ghost danger"
+                          data-testid={`delete-slot-${id}`}
+                          onClick={() => setPendingDelete(id)}
+                        >
+                          Delete
+                        </button>
+                      )}
+                      {pendingDelete === id && (
+                        <button
+                          type="button"
+                          className="danger"
+                          data-testid={`confirm-delete-${id}`}
+                          onClick={() => {
+                            deleteSlot(id);
+                            setPendingDelete(null);
+                            refreshSlots();
+                          }}
+                        >
+                          Confirm delete
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" className="text-btn" onClick={() => setSlotsOpen(null)}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -14,13 +14,15 @@ import {
   upgradeCost,
   wavePreview,
   writeSave,
+  type EnemyKind,
   type TargetMode,
   type TowerKind,
 } from "./balance";
 import { drain, type Command } from "./commands";
+import { clearRun, loadRun, readSlot, saveSlot } from "./records";
 import { patchHud, previewLine, type Phase } from "./hud";
+import { makeEnemy, poseRig, tickFigures } from "./figures";
 import {
-  makeEnemy,
   makeEntry,
   makeFort,
   makeGround,
@@ -33,6 +35,7 @@ import {
   makeSky,
   makeSoftPoints,
   makeTower,
+  tickScenery,
 } from "./meshes";
 import {
   playSound,
@@ -61,6 +64,9 @@ const AIM = new THREE.Vector3();
 const DIR = new THREE.Vector3();
 const BASE_YAW = Math.atan2(0.1, 0.8);
 const BASE_PITCH = Math.asin(0.95 / Math.hypot(0.1, 0.95, 0.8));
+/** 1 is the framed shot. Above 1 pulls away; phones must not reach the empty-field view. */
+const ZOOM_MIN = 0.62;
+const ZOOM_MAX = 1.12;
 const MOVE_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 const MODE_LABEL: Record<TargetMode, string> = {
   first: "First",
@@ -157,11 +163,15 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   const diorama = new THREE.Group();
   const decor: { kind: "e" | "t"; obj: THREE.Object3D; dist?: number; phase: number }[] = [];
-  const decorPlan: { kind: "raider" | "gaul" | "cataphract" | "elephant"; dist: number }[] = [
-    { kind: "raider", dist: 3 },
-    { kind: "gaul", dist: 7.5 },
-    { kind: "cataphract", dist: 12 },
-    { kind: "elephant", dist: 16 },
+  const decorPlan: { kind: EnemyKind; dist: number }[] = [
+    { kind: "raider", dist: 4 },
+    { kind: "gaul", dist: 10 },
+    { kind: "dacian", dist: 16 },
+    { kind: "berserker", dist: 22 },
+    { kind: "cataphract", dist: 28 },
+    { kind: "ram", dist: 35 },
+    { kind: "elephant", dist: 43 },
+    { kind: "warlord", dist: 51 },
   ];
   for (const item of decorPlan) {
     const obj = makeEnemy(item.kind);
@@ -169,9 +179,11 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     diorama.add(obj);
   }
   const decorTowers: { pad: number; kind: TowerKind }[] = [
+    { pad: 0, kind: "scorpio" },
     { pad: 1, kind: "sagittarii" },
     { pad: 3, kind: "ballista" },
     { pad: 5, kind: "onager" },
+    { pad: 6, kind: "naphtha" },
     { pad: 8, kind: "cohort" },
   ];
   for (const item of decorTowers) {
@@ -228,6 +240,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
   const floaters: Floater[] = [];
   const unitMap = new Map<number, THREE.Group>();
   const towerMap = new Map<number, THREE.Group>();
+  let hoverPad: number | null = null;
+  let ghost: THREE.Group | null = null;
+  let ghostKind: TowerKind | null = null;
   const shotMap = new Map<number, THREE.Object3D>();
   const patchMap = new Map<number, THREE.Mesh>();
   const corpses: { obj: THREE.Object3D; age: number }[] = [];
@@ -321,16 +336,6 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     const next = masonry < 4 ? MASONRY[masonry + 1]! : null;
     const tower = state && selected != null ? state.towers.find((t) => t.pad === selected) : undefined;
     const now = performance.now();
-    const contextual =
-      phase === "menu"
-        ? "Raise the walls. Man the engines. Hold the ford."
-        : !state || state.towers.length === 0
-          ? "Arm an engine, then set it on a stone pad."
-          : state.fighting
-            ? waveTitle
-            : state.wave === 0
-              ? "Sound the bucina when the line is ready."
-              : "The road is quiet. Call the next host, or raise the walls.";
     const bossE = state?.enemies.find((e) => e.alive && e.kind === "warlord");
     patchHud({
       phase,
@@ -361,7 +366,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
           }
         : null,
       preview: preview,
-      banner: now < bannerUntil ? banner : contextual,
+      banner: now < bannerUntil ? banner : "",
       boss: bossE ? { name: ENEMIES.warlord.name, hp: Math.max(0, bossE.hp), max: bossE.maxHp } : null,
       speed,
       muted,
@@ -378,6 +383,12 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
   }
 
   function act(command: Command) {
+    if (command.t === "dismiss") {
+      banner = "";
+      bannerUntil = 0;
+      publish();
+      return;
+    }
     if (command.t === "manual") {
       manual = command.open;
       publish();
@@ -410,10 +421,11 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     if (command.t === "arm") {
       if (phase !== "playing" && phase !== "paused") return;
       armed = armed === command.kind ? null : command.kind;
+      if (armed) say(`${TOWERS[armed].name} — set it on a stone pad.`);
       publish();
       return;
     }
-    if (command.t === "camp") {
+    if (command.t === "camp" || command.t === "quit") {
       clearPlay();
       state = null;
       phase = "menu";
@@ -425,10 +437,49 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         const plus = pad.getObjectByName("plus");
         if (plus) plus.visible = false;
       }
+      resetEye();
+      publish();
+      return;
+    }
+    if (command.t === "save") {
+      if (!state || state.outcome !== "play" || (phase !== "playing" && phase !== "paused")) return;
+      const kept = saveSlot(command.slot, { version: 1, state, speed, paused: phase === "paused" }, command.name);
+      say(kept ? `${kept} is kept on this device.` : "That slot could not be kept.");
+      publish();
+      return;
+    }
+    if (command.t === "surrender") {
+      if (!state || state.outcome !== "play" || (phase !== "playing" && phase !== "paused")) return;
+      state.outcome = "defeat";
+      state.fighting = false;
+      phase = "defeat";
+      clearRun();
+      playSound("lose");
+      noteBest();
+      say("The legion yields.");
+      publish();
+      return;
+    }
+    if (command.t === "continue") {
+      const run = command.slot != null ? (readSlot(command.slot)?.run ?? null) : loadRun();
+      if (!run) return;
+      clearPlay();
+      state = run.state;
+      phase = run.paused ? "paused" : "playing";
+      speed = run.speed;
+      selected = null;
+      armed = null;
+      diorama.visible = false;
+      applyMasonry(state.masonry, true);
+      intro = 1;
+      waveTitle = "";
+      resetEye();
+      say("The saved watch resumes.");
       publish();
       return;
     }
     if (command.t === "start" || command.t === "again") {
+      clearRun();
       clearPlay();
       state = createState();
       phase = "playing";
@@ -439,6 +490,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       applyMasonry(0, true);
       intro = reduced ? 1 : 0;
       waveTitle = "";
+      resetEye();
       say("The ford is yours. Set an engine.");
       publish();
       return;
@@ -507,9 +559,11 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     const existing = state.towers.find((t) => t.pad === pad);
     if (armed && !existing) {
       const res = placeTower(state, pad, armed);
-      if (res.ok) {
+        if (res.ok) {
         playSound("build");
         selected = pad;
+        const spot = layout.pads[pad];
+        if (spot) motes.burst(spot.x, 0.4, spot.z, "#e6c36a", 12, 1.8, 0.4, 3);
         say(`${TOWERS[armed].name} is set.`);
       } else toastFrom(res.text);
       publish();
@@ -578,12 +632,13 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       const b = pts[1]!;
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       if (pinch > 0 && dist > 0) {
-        camZoom = THREE.MathUtils.clamp(camZoom * (pinch / dist), 0.52, 1.85);
+        camZoom = THREE.MathUtils.clamp(camZoom * (pinch / dist), ZOOM_MIN, ZOOM_MAX);
         camUser = true;
       }
       pinch = dist;
       if (gesture) gesture.dragged = true;
       hoverRing.visible = false;
+      hoverPad = null;
       return;
     }
     pinch = 0;
@@ -596,18 +651,22 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         gesture.lx = ev.clientX;
         gesture.ly = ev.clientY;
         hoverRing.visible = false;
+        hoverPad = null;
         return;
       }
     }
     if (phase !== "playing") {
       hoverRing.visible = false;
+      hoverPad = null;
       return;
     }
     const hit = pick(ev.clientX, ev.clientY);
     if (!hit || hit.fort) {
       hoverRing.visible = false;
+      hoverPad = null;
       return;
     }
+    hoverPad = hit.pad;
     const pad = layout.pads[hit.pad];
     if (!pad) return;
     const tower = state?.towers.find((t) => t.pad === hit.pad);
@@ -650,7 +709,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     ev.preventDefault();
     camUser = true;
     const factor = ev.deltaY > 0 ? 1.08 : 0.92;
-    camZoom = THREE.MathUtils.clamp(camZoom * factor, 0.52, 1.85);
+    camZoom = THREE.MathUtils.clamp(camZoom * factor, ZOOM_MIN, ZOOM_MAX);
   }
 
   function onContext(ev: Event) {
@@ -782,8 +841,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     for (const ev of events) {
       if (ev.type === "shoot") {
         const mesh = towerMap.get(ev.pad);
-        const arm = mesh?.getObjectByName("arm");
-        if (arm) arm.userData.kick = 1;
+        if (mesh) mesh.userData.kick = 1;
+        const pad = layout.pads[ev.pad];
+        if (pad) motes.burst(pad.x, 1.05, pad.z, ev.kind === "naphtha" ? "#ffb15a" : "#ffe0a8", 7, 1.5, 0.22, 1.2);
         if (ev.kind === "onager") playSound("stone");
         else if (ev.kind === "naphtha") playSound("fire");
         else if (ev.kind === "ballista") playSound("bolt");
@@ -823,11 +883,13 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         say(`The host breaks. +${ev.bounty} denarii`, 2.4);
       } else if (ev.type === "victory") {
         phase = "victory";
+        clearRun();
         playSound("win");
         noteBest();
         say("The ford holds.");
       } else if (ev.type === "defeat") {
         phase = "defeat";
+        clearRun();
         playSound("lose");
         noteBest();
         say("The gate is broken.");
@@ -835,7 +897,135 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     }
   }
 
-  function syncWorld(time: number) {
+  function flicker(obj: THREE.Object3D, time: number, phase: number) {
+    const base = obj.userData.base as [number, number, number] | undefined;
+    const s = 0.88 + Math.sin(time * 13 + phase) * 0.14;
+    const sy = 0.9 + Math.sin(time * 17 + phase) * 0.2;
+    if (base) obj.scale.set(base[0] * s, base[1] * sy, base[2] * s);
+    else obj.scale.set(s, s * sy, s);
+  }
+
+  function nearestPath(x: number, z: number) {
+    let best = Infinity;
+    let px = x;
+    let pz = z + 1;
+    for (let i = 0; i <= 28; i++) {
+      const s = layout.path.sample((layout.path.total * i) / 28);
+      const d = (s.x - x) ** 2 + (s.z - z) ** 2;
+      if (d < best) {
+        best = d;
+        px = s.x;
+        pz = s.z;
+      }
+    }
+    return { x: px, z: pz };
+  }
+
+  function aimYaw(mesh: THREE.Object3D, tx: number, tz: number, dt: number) {
+    const aim = mesh.getObjectByName("aim");
+    if (!aim) return;
+    const want = Math.atan2(tx - mesh.position.x, tz - mesh.position.z);
+    let delta = want - aim.rotation.y;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    aim.rotation.y += delta * (1 - Math.exp(-7 * dt));
+  }
+
+  function poseTower(mesh: THREE.Object3D, time: number, dt: number) {
+    const kick = Number(mesh.userData.kick ?? 0);
+    mesh.userData.kick = Math.max(0, kick - dt * 2.6);
+    const soldiers: THREE.Object3D[] = [];
+    mesh.traverse((obj) => {
+      if (obj.name === "soldier") soldiers.push(obj);
+    });
+    for (const soldier of soldiers) poseRig(soldier, time * 1.7 + soldier.position.x * 3, 0.05, time, kick);
+    mesh.traverse((obj) => {
+      if (obj.name === "arm") {
+        const rest = Number(obj.userData.rest ?? 0);
+        const thrust = Math.sin(Math.min(1, kick) * Math.PI);
+        obj.rotation.x = rest + thrust * 0.95;
+      } else if (obj.name === "pennant") {
+        obj.rotation.y = Math.sin(time * 2.2 + mesh.position.x) * 0.28;
+      } else if (obj.name === "flame") {
+        flicker(obj, time, mesh.position.x + mesh.position.z);
+      }
+    });
+  }
+
+  function faceOf(mesh: THREE.Object3D, range = 0, dt = 0.016) {
+    let tx = mesh.userData.faceX as number | undefined;
+    let tz = mesh.userData.faceZ as number | undefined;
+    if (tx == null || tz == null) {
+      const face = nearestPath(mesh.position.x, mesh.position.z);
+      mesh.userData.faceX = face.x;
+      mesh.userData.faceZ = face.z;
+      tx = face.x;
+      tz = face.z;
+    }
+    if (state && range > 0) {
+      let best = range * range;
+      for (const enemy of state.enemies) {
+        if (!enemy.alive) continue;
+        const p = enemyPos(enemy);
+        const d = (p.x - mesh.position.x) ** 2 + (p.z - mesh.position.z) ** 2;
+        if (d <= best) {
+          best = d;
+          tx = p.x;
+          tz = p.z;
+        }
+      }
+    }
+    aimYaw(mesh, tx, tz, dt);
+  }
+
+  function dropGhost() {
+    if (!ghost) return;
+    ghost.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const mat of mats) mat.dispose();
+      }
+    });
+    ghost.removeFromParent();
+    ghost = null;
+    ghostKind = null;
+  }
+
+  function syncGhost(time: number) {
+    const show = phase === "playing" && armed != null && hoverPad != null && state != null;
+    const occupied = show && state!.towers.some((tower) => tower.pad === hoverPad);
+    if (!show || occupied || armed == null || hoverPad == null) {
+      if (ghost) ghost.visible = false;
+      return;
+    }
+    if (!ghost || ghostKind !== armed) {
+      dropGhost();
+      ghost = makeTower(armed);
+      ghost.name = "ghost";
+      ghost.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          obj.material = mats.map((mat) => {
+            const copy = mat.clone();
+            copy.transparent = true;
+            copy.opacity = 0.42;
+            copy.depthWrite = false;
+            return copy;
+          });
+        }
+      });
+      scene.add(ghost);
+      ghostKind = armed;
+    }
+    const pad = layout.pads[hoverPad];
+    if (!pad) return;
+    ghost.visible = true;
+    ghost.position.set(pad.x, Math.sin(time * 3) * 0.04, pad.z);
+    faceOf(ghost, 0, 0.016);
+    poseTower(ghost, time, 0.016);
+  }
+
+  function syncWorld(time: number, dt: number) {
     if (!state) return;
     const seenT = new Set<number>();
     for (const tower of state.towers) {
@@ -852,20 +1042,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
         if (plus) plus.visible = false;
       }
       const target = tower.level === 1 ? 1 : tower.level === 2 ? 1.08 : 1.16;
-      mesh.scale.setScalar(THREE.MathUtils.damp(mesh.scale.x, target, 8, 1 / 60));
-      mesh.traverse((obj) => {
-        if (obj.name === "arm") {
-          const kick = Number(obj.userData.kick ?? 0);
-          const rest = Number(obj.userData.rest ?? 0);
-          obj.rotation.x = rest + Math.sin(Math.min(1, kick) * Math.PI) * 0.85;
-          obj.userData.kick = Math.max(0, kick - 1 / 60 * 3);
-        } else if (obj.name === "pennant") {
-          obj.rotation.y = Math.sin(time * 2.2 + tower.pad) * 0.4;
-        } else if (obj.name === "flame") {
-          const s = 0.85 + Math.sin(time * 14 + tower.pad) * 0.18;
-          obj.scale.set(s, s * 1.2, s);
-        }
-      });
+      mesh.scale.setScalar(THREE.MathUtils.damp(mesh.scale.x, target, 8, dt));
+      faceOf(mesh, towerStats(tower.kind, tower.level).range, dt);
+      poseTower(mesh, time, dt);
     }
     for (const [pad, mesh] of towerMap) {
       if (!seenT.has(pad)) {
@@ -888,13 +1067,16 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       }
       const p = enemyPos(e);
       const def = ENEMIES[e.kind];
-      const bob = Math.sin(time * def.hz + e.id) * def.bob;
+      const bob = Math.sin(time * def.hz + e.id) * def.bob * (reduced ? 0 : 0.22);
       mesh.position.set(p.x, bob, p.z);
       AIM.set(p.x + p.tx, bob, p.z + p.tz);
       mesh.lookAt(AIM);
+      poseRig(mesh, e.dist * def.hz * 0.48 + e.id, reduced ? 0 : 1, time, 0);
       mesh.traverse((obj) => {
         if (obj.name === "axle") obj.rotation.x = -e.dist * 2.6;
       });
+      if (!reduced && e.slowT > 0) motes.burst(p.x, 0.25, p.z, "#9fd4de", 1, 0.35, 0.28, 0.4);
+      else if (!reduced && Math.random() < 0.07) motes.burst(p.x, 0.08, p.z, "#c6b088", 1, 0.3, 0.25, 1.4);
     }
     for (const [id, mesh] of unitMap) {
       if (!aliveIds.has(id)) {
@@ -919,6 +1101,10 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       mesh.position.set(p.x, p.y, p.z);
       AIM.set(p.x + (p.x - px), p.y, p.z + (p.z - pz));
       if (Math.hypot(p.x - px, p.z - pz) > 0.0001) mesh.lookAt(AIM);
+      if (Math.hypot(p.x - px, p.z - pz) > 0.04) {
+        const color = p.visual === "pot" ? "#ffb15a" : p.visual === "stone" ? "#d9d0c4" : "#f6e7c8";
+        motes.burst(px, p.y, pz, color, 1, 0.15, 0.2, 0.15);
+      }
       mesh.userData.px = p.x;
       mesh.userData.pz = p.z;
     }
@@ -970,9 +1156,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     for (let i = corpses.length - 1; i >= 0; i--) {
       const c = corpses[i]!;
       c.age += dt;
-      c.obj.position.y -= dt * 0.4;
-      c.obj.scale.setScalar(Math.max(0.01, 1 - c.age * 2.2));
-      if (c.age > 0.45) {
+      c.obj.rotateX(dt * 2.6);
+      c.obj.position.y = Math.max(-0.15, c.obj.position.y - dt * 0.25);
+      if (c.age > 1.05) {
         c.obj.removeFromParent();
         corpses.splice(i, 1);
       }
@@ -983,32 +1169,34 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     if (!diorama.visible) return;
     for (const item of decor) {
       if (item.kind === "e" && item.dist != null) {
-        const s = layout.path.sample(item.dist);
-        const bob = Math.sin(time * 8 + item.phase) * 0.06;
+        const s = layout.path.sample(Math.min(layout.path.total - 0.05, item.dist));
+        const bob = Math.sin(time * 2.2 + item.phase) * 0.03;
         item.obj.position.set(s.x, bob, s.z);
         AIM.set(s.x + s.tx, bob, s.z + s.tz);
         item.obj.lookAt(AIM);
-      } else {
+        poseRig(item.obj, time * 5.2 + item.phase, reduced ? 0 : 0.9, time, 0);
         item.obj.traverse((obj) => {
-          if (obj.name === "pennant") obj.rotation.y = Math.sin(time * 2 + item.phase) * 0.4;
-          if (obj.name === "flame") {
-            const sc = 0.85 + Math.sin(time * 13 + item.phase) * 0.15;
-            obj.scale.set(sc, sc, sc);
-          }
+          if (obj.name === "axle") obj.rotation.x = -time * 3.2;
         });
+      } else {
+        faceOf(item.obj, 0, 0.016);
+        poseTower(item.obj, time, 0.016);
       }
     }
   }
 
-  function fitCamera(aspect: number, orbit: number) {
+  function fitCamera(aspect: number, shot?: { orbit: number; panX: number; panZ: number; zoom: number }) {
     const fov = (camera.fov * Math.PI) / 180;
-    const distH = 9.6 / Math.tan(fov / 2);
-    const distW = 12 / Math.tan(fov / 2) / Math.max(0.4, aspect);
-    const dist = Math.max(distH, distW) * (1.16 - 0.16 * intro) * camZoom;
-    const yaw = BASE_YAW + camYaw + orbit;
-    const pitch = THREE.MathUtils.clamp(BASE_PITCH + camPitch, 0.28, 1.28);
+    const tan = Math.tan(fov / 2);
+    const distH = 9.6 / tan;
+    const distW = 12 / tan / Math.max(0.72, aspect);
+    // A tall phone used to pull back until the fort was a speck and the top bar left the screen.
+    const framed = Math.min(Math.max(distH, distW), distH * 1.08);
+    const dist = framed * (1.16 - 0.16 * intro) * (shot?.zoom ?? camZoom);
+    const yaw = BASE_YAW + (shot ? 0 : camYaw) + (shot?.orbit ?? 0);
+    const pitch = THREE.MathUtils.clamp(BASE_PITCH + (shot ? 0 : camPitch), 0.28, 1.28);
     DIR.set(Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw));
-    CAM_LOOK.set(LOOK.x + panX, LOOK.y, LOOK.z + panZ);
+    CAM_LOOK.set(LOOK.x + (shot?.panX ?? panX), LOOK.y, LOOK.z + (shot?.panZ ?? panZ));
     camera.position.copy(CAM_LOOK).addScaledVector(DIR, dist);
     camera.lookAt(CAM_LOOK);
     basePos.copy(camera.position);
@@ -1051,24 +1239,32 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       fx.font = "600 11px Outfit, sans-serif";
       fx.textAlign = "center";
       for (const e of state.enemies) {
-        if (!e.alive || (e.hp >= e.maxHp && e.kind !== "warlord")) continue;
+        if (!e.alive || (e.hp >= e.maxHp && e.kind !== "warlord" && e.slowT <= 0)) continue;
         const p = enemyPos(e);
-        const head = project(p.x, ENEMIES[e.kind].head + 0.15, p.z);
+        const head = project(p.x, ENEMIES[e.kind].head + 0.18, p.z);
         if (!head) continue;
-        const width = e.kind === "warlord" ? 64 : 36;
+        const width = e.kind === "warlord" ? 72 : e.kind === "elephant" ? 52 : 38;
         const ratio = Math.max(0, e.hp / e.maxHp);
-        fx.fillStyle = "rgba(20,14,10,0.7)";
-        fx.fillRect(head.x - width / 2, head.y, width, 4);
+        const y = head.y;
+        fx.fillStyle = "rgba(20,14,10,0.78)";
+        fx.fillRect(head.x - width / 2 - 1, y - 1, width + 2, 6);
         fx.fillStyle = ratio < 0.35 ? "#c4483a" : "#d4b36a";
-        fx.fillRect(head.x - width / 2, head.y, width * ratio, 4);
+        fx.fillRect(head.x - width / 2, y, width * ratio, 4);
+        if (e.slowT > 0) {
+          fx.fillStyle = "#7ec8d4";
+          fx.fillRect(head.x - width / 2, y + 4, width, 2);
+        }
       }
     }
     fx.font = "700 13px Outfit, sans-serif";
+    fx.lineWidth = 3;
     for (let i = floaters.length - 1; i >= 0; i--) {
       const f = floaters[i]!;
       const p = project(f.x, f.y + f.age * 0.8, f.z);
       if (!p) continue;
       fx.globalAlpha = Math.max(0, 1 - f.age / 0.8);
+      fx.strokeStyle = "rgba(20,12,8,0.72)";
+      fx.strokeText(f.text, p.x, p.y);
       fx.fillStyle = f.color;
       fx.fillText(f.text, p.x, p.y);
       fx.globalAlpha = 1;
@@ -1097,8 +1293,17 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     }
     intro = Math.min(1, intro + dt * (reduced ? 4 : 0.8));
     slideEye(dt);
-    const orbit = phase === "menu" && !reduced && !camUser ? Math.sin(now / 1000 * 0.18) * 0.18 : 0;
-    fitCamera(camera.aspect, orbit);
+    let shot: { orbit: number; panX: number; panZ: number; zoom: number } | undefined;
+    if (phase === "menu" && !camUser) {
+      if (reduced) shot = { orbit: 0.22, panX: 1.4, panZ: 0.4, zoom: 0.9 };
+      else {
+        const u = ((now / 1000) % 16) / 16;
+        const s = Math.sin(u * Math.PI * 2);
+        const c = Math.cos(u * Math.PI * 2);
+        shot = { orbit: s * 0.5, panX: s * 3.6, panZ: c * 2.1, zoom: 0.82 + (0.5 + 0.5 * c) * 0.2 };
+      }
+    }
+    fitCamera(camera.aspect, shot);
     if (shakeOn && trauma > 0) {
       trauma = Math.max(0, trauma - dt * 1.7);
       const s = trauma * trauma;
@@ -1109,20 +1314,22 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     } else trauma = Math.max(0, trauma - dt);
     flash = Math.max(0, flash - dt * 1.4);
 
+    const elapsed = now / 1000;
+    tickFigures(elapsed);
+    tickScenery(elapsed);
     fort.traverse((obj) => {
-      if (obj.name === "flame") {
-        const s = 0.85 + Math.sin(now / 1000 * 12 + obj.position.x) * 0.2;
-        obj.scale.set(0.12 * s, 0.26 * s, 0.12 * s);
-      }
-      if (obj.name === "eagle") obj.rotation.y = Math.sin(now / 1000 * 0.8) * 0.25;
+      if (obj.name === "flame") flicker(obj, elapsed, obj.position.x);
+      if (obj.name === "eagle") obj.rotation.y = Math.sin(elapsed * 0.8) * 0.25;
+      if (obj.name === "pennant") obj.rotation.y = Math.sin(elapsed * 2.1 + obj.position.x) * 0.3;
     });
     for (const obj of [fort.getObjectByName("palisade"), fort.getObjectByName("curtain"), fort.getObjectByName("gatehouse"), fort.getObjectByName("principia")]) {
       if (obj && obj.visible && obj.scale.y < 1) obj.scale.y = Math.min(1, obj.scale.y + dt * 2.2);
     }
 
-    if (phase === "playing" || phase === "paused" || phase === "victory" || phase === "defeat") syncWorld(now / 1000);
+    if (phase === "playing" || phase === "paused" || phase === "victory" || phase === "defeat") syncWorld(elapsed, dt);
+    syncGhost(elapsed);
     tickCorpses(dt);
-    tickDecor(now / 1000);
+    tickDecor(elapsed);
     if (Math.random() < dt * 6) {
       motes.burst((Math.random() - 0.5) * 18, 1.2 + Math.random(), (Math.random() - 0.5) * 12, "#f6e2c0", 1, 0.25, 1.6, 0.15);
     }
@@ -1154,6 +1361,10 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(stage);
+  const onResize = () => resize();
+  window.addEventListener("resize", onResize);
+  window.visualViewport?.addEventListener("resize", onResize);
+  window.visualViewport?.addEventListener("scroll", onResize);
   resize();
   publish();
   glCanvas.addEventListener("pointerdown", onPointerDown);
@@ -1177,6 +1388,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     dispose() {
       alive = false;
       ro.disconnect();
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("scroll", onResize);
       glCanvas.removeEventListener("pointerdown", onPointerDown);
       glCanvas.removeEventListener("pointermove", onPointerMove);
       glCanvas.removeEventListener("pointerup", onPointerUp);
@@ -1188,6 +1402,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pointerdown", unlockAudio);
       renderer.dispose();
+      dropGhost();
       ready.__castrumReady = false;
     },
   };

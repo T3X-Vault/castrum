@@ -5,6 +5,10 @@ export type Command =
   | { t: "wave" }
   | { t: "again" }
   | { t: "camp" }
+  | { t: "quit" }
+  | { t: "surrender" }
+  | { t: "save"; slot: number; name: string }
+  | { t: "continue"; slot?: number }
   | { t: "endless" }
   | { t: "pause" }
   | { t: "speed" }
@@ -15,7 +19,8 @@ export type Command =
   | { t: "masonry" }
   | { t: "mute" }
   | { t: "shake" }
-  | { t: "manual"; open: boolean };
+  | { t: "manual"; open: boolean }
+  | { t: "dismiss" };
 
 const queue: Command[] = [];
 
