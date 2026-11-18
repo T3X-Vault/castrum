@@ -1294,7 +1294,8 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   function frame(now: number) {
     if (!alive) return;
-    const dt = Math.min(0.05, clock ? (now - clock) / 1000 : 0.016);
+    const rawDt = clock ? (now - clock) / 1000 : 0.016;
+    const dt = Math.min(0.05, rawDt);
     clock = now;
     resetHitBudget();
     for (const command of drain()) act(command);
@@ -1316,7 +1317,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     slideEye(dt);
     let shot: { orbit: number; panX: number; panZ: number; zoom: number } | undefined;
     if (reel >= 0) {
-      reel += dt;
+      reel += Math.min(0.2, rawDt);
       if (reel > 21) reel = -1;
       else {
         const u = reel / 21;

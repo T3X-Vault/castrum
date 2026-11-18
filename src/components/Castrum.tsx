@@ -399,9 +399,14 @@ export function Castrum() {
 
         {hud.phase === "menu" && !hud.reel && (
           <>
-            <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => press({ t: "trailer" })}>
-              Trailer
-            </button>
+            <div className="trailer-row">
+              <button className="trailer-chip" type="button" data-testid="trailer" onClick={() => press({ t: "trailer" })}>
+                Trailer
+              </button>
+              <a className="trailer-chip" href="/trailer.mp4" download="castrum-trailer.mp4">
+                Download
+              </a>
+            </div>
             <section className="menu">
               <h1>CASTRUM</h1>
               <div className="lede-row">
@@ -465,10 +470,15 @@ export function Castrum() {
         )}
 
         {hud.reel && (
-          <button className="reel" type="button" onClick={() => press({ t: "trailer" })}>
+          <div className="reel">
             <span>{hud.reel}</span>
-            <small>Tap to close</small>
-          </button>
+            <a href="/trailer.mp4" download="castrum-trailer.mp4">
+              Download
+            </a>
+            <button type="button" onClick={() => press({ t: "trailer" })}>
+              Close
+            </button>
+          </div>
         )}
 
         {hud.phase === "paused" && (

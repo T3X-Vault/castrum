@@ -224,10 +224,17 @@
   letter-spacing: 0.08em;
 }
 
-.reel small {
+.reel a,
+.reel button {
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-marble-dim);
+  color: var(--color-gold);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.72rem;
+  text-decoration: none;
 }
 
 .readout-bit strong {
@@ -463,13 +470,19 @@
   justify-content: center;
 }
 
-.trailer-chip {
+.trailer-row {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 4;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.trailer-chip {
   margin: 0;
   padding: 0.28rem 0.6rem;
+  text-decoration: none;
   font: inherit;
   color: var(--color-marble);
   background: color-mix(in oklab, var(--color-ink) 72%, transparent);
