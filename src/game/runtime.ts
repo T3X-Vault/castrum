@@ -64,6 +64,9 @@ const AIM = new THREE.Vector3();
 const DIR = new THREE.Vector3();
 const BASE_YAW = Math.atan2(0.1, 0.8);
 const BASE_PITCH = Math.asin(0.95 / Math.hypot(0.1, 0.95, 0.8));
+/** 1 is the framed shot. Above 1 pulls away; phones must not reach the empty-field view. */
+const ZOOM_MIN = 0.62;
+const ZOOM_MAX = 1.12;
 const MOVE_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 const MODE_LABEL: Record<TargetMode, string> = {
   first: "First",
@@ -629,7 +632,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
       const b = pts[1]!;
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       if (pinch > 0 && dist > 0) {
-        camZoom = THREE.MathUtils.clamp(camZoom * (pinch / dist), 0.52, 1.85);
+        camZoom = THREE.MathUtils.clamp(camZoom * (pinch / dist), ZOOM_MIN, ZOOM_MAX);
         camUser = true;
       }
       pinch = dist;
@@ -706,7 +709,7 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     ev.preventDefault();
     camUser = true;
     const factor = ev.deltaY > 0 ? 1.08 : 0.92;
-    camZoom = THREE.MathUtils.clamp(camZoom * factor, 0.52, 1.85);
+    camZoom = THREE.MathUtils.clamp(camZoom * factor, ZOOM_MIN, ZOOM_MAX);
   }
 
   function onContext(ev: Event) {
@@ -1184,9 +1187,12 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   function fitCamera(aspect: number, shot?: { orbit: number; panX: number; panZ: number; zoom: number }) {
     const fov = (camera.fov * Math.PI) / 180;
-    const distH = 9.6 / Math.tan(fov / 2);
-    const distW = 12 / Math.tan(fov / 2) / Math.max(0.4, aspect);
-    const dist = Math.max(distH, distW) * (1.16 - 0.16 * intro) * (shot?.zoom ?? camZoom);
+    const tan = Math.tan(fov / 2);
+    const distH = 9.6 / tan;
+    const distW = 12 / tan / Math.max(0.72, aspect);
+    // A tall phone used to pull back until the fort was a speck and the top bar left the screen.
+    const framed = Math.min(Math.max(distH, distW), distH * 1.08);
+    const dist = framed * (1.16 - 0.16 * intro) * (shot?.zoom ?? camZoom);
     const yaw = BASE_YAW + (shot ? 0 : camYaw) + (shot?.orbit ?? 0);
     const pitch = THREE.MathUtils.clamp(BASE_PITCH + (shot ? 0 : camPitch), 0.28, 1.28);
     DIR.set(Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw));
@@ -1355,6 +1361,10 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(stage);
+  const onResize = () => resize();
+  window.addEventListener("resize", onResize);
+  window.visualViewport?.addEventListener("resize", onResize);
+  window.visualViewport?.addEventListener("scroll", onResize);
   resize();
   publish();
   glCanvas.addEventListener("pointerdown", onPointerDown);
@@ -1378,6 +1388,9 @@ export function mountGame(glCanvas: HTMLCanvasElement, fxCanvas: HTMLCanvasEleme
     dispose() {
       alive = false;
       ro.disconnect();
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("scroll", onResize);
       glCanvas.removeEventListener("pointerdown", onPointerDown);
       glCanvas.removeEventListener("pointermove", onPointerMove);
       glCanvas.removeEventListener("pointerup", onPointerUp);

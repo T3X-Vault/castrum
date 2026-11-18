@@ -32,6 +32,32 @@ import { WalletDock } from "@/components/WalletDock";
 import { authEnabled, signIn, signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
+function XMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+    </svg>
+  );
+}
+
+function FacebookMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14.5 8.5V6.8c0-.7.5-1.1 1.2-1.1H17V3h-2.1C12.2 3 11 4.4 11 6.6v1.9H9v2.8h2V21h3.1v-9.7h2.2l.4-2.8h-2.6z" />
+    </svg>
+  );
+}
+
+function InstagramMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="17.2" cy="6.8" r="1" />
+    </svg>
+  );
+}
+
 const ICONS: Record<TowerKind, typeof Crosshair> = {
   scorpio: Zap,
   sagittarii: Target,
@@ -122,6 +148,29 @@ export function Castrum() {
     setSavedRun(hasRun());
     if (hud.phase === "playing" || hud.phase === "paused" || hud.phase === "menu") setLeftName("");
   }, [hud.phase]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const pin = () => {
+      const view = window.visualViewport;
+      if (!view) return;
+      root.style.top = `${view.offsetTop}px`;
+      root.style.left = `${view.offsetLeft}px`;
+      root.style.width = `${view.width}px`;
+      root.style.height = `${view.height}px`;
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    pin();
+    window.visualViewport?.addEventListener("resize", pin);
+    window.visualViewport?.addEventListener("scroll", pin);
+    window.addEventListener("orientationchange", pin);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", pin);
+      window.visualViewport?.removeEventListener("scroll", pin);
+      window.removeEventListener("orientationchange", pin);
+    };
+  }, []);
 
   function refreshSlots() {
     setSlots(listSlots());
@@ -395,19 +444,32 @@ export function Castrum() {
               </div>
               <div className="socials">
                 {xAccount ? (
-                  <button className="ghost" type="button" onClick={() => void signOut()}>
-                    X · {xAccount.displayName ?? "Connected"}
+                  <button
+                    className="ghost icon-btn"
+                    type="button"
+                    data-on="true"
+                    aria-label={`Signed in on X as ${xAccount.displayName ?? "your account"}. Sign out.`}
+                    onClick={() => void signOut()}
+                  >
+                    <XMark />
                   </button>
                 ) : (
-                  <button className="ghost" type="button" data-testid="connect-x" disabled={xBusy} onClick={connectX}>
-                    {xBusy ? "Opening X…" : "Connect X"}
+                  <button
+                    className="ghost icon-btn"
+                    type="button"
+                    data-testid="connect-x"
+                    aria-label="Connect X"
+                    disabled={xBusy}
+                    onClick={connectX}
+                  >
+                    <XMark />
                   </button>
                 )}
-                <button className="ghost" type="button" disabled>
-                  Facebook · Coming soon
+                <button className="ghost icon-btn" type="button" disabled aria-label="Facebook, coming soon">
+                  <FacebookMark />
                 </button>
-                <button className="ghost" type="button" disabled>
-                  Instagram · Coming soon
+                <button className="ghost icon-btn" type="button" disabled aria-label="Instagram, coming soon">
+                  <InstagramMark />
                 </button>
               </div>
               {xNote && (
@@ -675,6 +737,8 @@ export function Castrum() {
                           className="ghost"
                           data-testid={`load-slot-${id}`}
                           onClick={() => {
+                            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+                            window.scrollTo(0, 0);
                             setSlotsOpen(null);
                             press({ t: "continue", slot: id });
                           }}
