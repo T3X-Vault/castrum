@@ -170,6 +170,7 @@ export function Castrum() {
     <div className="castrum" ref={rootRef} data-quiet={hud.fighting ? "true" : "false"}>
       {hud.phase !== "menu" && (
         <header className="hud">
+          <div className="hud-main">
           <div className="readout">
             <span className="readout-bit">
               <span>Denarii</span>
@@ -197,6 +198,11 @@ export function Castrum() {
                 </span>
               </span>
             )}
+          </div>
+          <div className="hud-marks">
+            <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={28} height={26} />
+            <img src="/brand/t3x-badge.png" alt="T3X" width={26} height={28} />
+          </div>
           </div>
           <div className="hud-actions">
             {choosing && (
@@ -327,13 +333,9 @@ export function Castrum() {
 
         {hud.phase === "menu" && (
           <>
+            <img className="menu-mark" src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={72} height={66} />
             <p className="trailer-chip">Trailer</p>
             <section className="menu">
-              <div className="marks">
-                <img src="/brand/futuret3ch-mark.png" alt="" width={72} height={66} />
-                <p>Supported by Futuret3ch</p>
-                <img className="t3x-badge" src="/brand/t3x-badge.png" alt="T3X" width={64} height={68} />
-              </div>
               <h1>CASTRUM</h1>
               <p className="lede">Hold the ford.</p>
               <div className="menu-actions">
