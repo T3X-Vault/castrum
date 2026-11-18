@@ -31,6 +31,7 @@ import {
   frontier,
   provinceHeld,
   readHeld,
+  resetMap,
   zoneById,
   zoneHardness,
 } from "@/game/campaign";
@@ -450,21 +451,36 @@ export function Castrum() {
               Trailer
             </button>
             <section className="menu">
-              <h1>CASTRUM</h1>
-              <div className="lede-row">
-                <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={44} height={40} />
-                <img src="/brand/t3x-badge.png" alt="T3X" width={40} height={42} />
-                <p className="lede">Hold the ford.</p>
+              <div className="menu-head">
+                <h1>CASTRUM</h1>
+                <div className="menu-marks">
+                  <a href="https://futuret3.com.au" target="_blank" rel="noreferrer">
+                    <img src="/brand/futuret3ch-mark.png" alt="Futuret3ch" width={44} height={40} />
+                  </a>
+                  <a href="https://t3x-wallet.vercel.app/" target="_blank" rel="noreferrer">
+                    <img src="/brand/t3x-badge.png" alt="T3X" width={40} height={42} />
+                  </a>
+                </div>
               </div>
+              <p className="lede">Hold the ford.</p>
               <div className="menu-actions">
                 <button
                   className="primary"
                   data-testid="begin"
-                  disabled={provinceHeld()}
-                  onClick={() => press({ t: "march", chapter: frontier() })}
+                  onClick={() => {
+                    resetMap();
+                    setHeld([]);
+                    setPicked(1);
+                    press({ t: "march", chapter: 1 });
+                  }}
                 >
-                  {provinceHeld() ? "Province held" : `March · ${zoneById(frontier()).name}`}
+                  New game
                 </button>
+                {readHeld().length > 0 && !provinceHeld() && (
+                  <button className="ghost" type="button" onClick={() => press({ t: "march", chapter: frontier() })}>
+                    Continue march · {zoneById(frontier()).name}
+                  </button>
+                )}
                 <button
                   className="ghost"
                   data-testid="map"
@@ -522,7 +538,10 @@ export function Castrum() {
                   ))}
                 </ol>
               )}
-              <p className="credit">Created by Futuret3ch</p>
+              <a className="credit" href="https://futuret3.com.au" target="_blank" rel="noreferrer">
+                <img src="/brand/futuret3ch-mark.png" alt="" width={28} height={26} />
+                Created by Futuret3ch
+              </a>
             </section>
           </>
         )}

@@ -581,11 +581,45 @@
   color: var(--color-gold);
 }
 
+.menu-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.menu-head h1 {
+  margin: 0;
+}
+
+.menu-marks {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.menu-marks img {
+  height: 2.35rem;
+  width: auto;
+  display: block;
+}
+
 .credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0.9rem 0 0;
   color: var(--color-marble-dim);
   letter-spacing: 0.06em;
   font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.credit img {
+  height: 1.45rem;
+  width: auto;
+  display: block;
 }
 
 .wallet-note,

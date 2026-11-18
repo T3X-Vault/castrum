@@ -99,6 +99,10 @@ export function provinceHeld(): boolean {
   return readHeld().length >= CHAPTER_COUNT;
 }
 
+export function resetMap() {
+  writeHeld([]);
+}
+
 export function holdZone(id: number) {
   const next = new Set(readHeld());
   next.add(id);
