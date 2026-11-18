@@ -651,7 +651,7 @@ export function Castrum() {
                     <XMark />
                     <span>X</span>
                   </a>
-                  <a className="brand-fb" href="https://www.facebook.com/futuret3ch" target="_blank" rel="noreferrer">
+                  <a className="brand-fb" href="https://www.facebook.com/share/1DtSCqaD5e/?mibextid=wwXIfr" target="_blank" rel="noreferrer">
                     <FacebookMark />
                     <span>Facebook</span>
                   </a>
