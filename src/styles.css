@@ -451,16 +451,6 @@
   font-size: 0.85rem;
 }
 
-.menu-mark {
-  position: absolute;
-  top: 0.7rem;
-  left: 0.75rem;
-  z-index: 4;
-  width: 3.6rem;
-  height: auto;
-  pointer-events: none;
-}
-
 .wallet-note,
 .board-label {
   margin: 0.7rem 0 0;
@@ -650,6 +640,24 @@
 .lede {
   margin: 0 0 0.85rem;
   color: var(--color-marble);
+}
+
+.lede-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.85rem;
+}
+
+.lede-row .lede {
+  margin: 0;
+}
+
+.lede-row img {
+  height: 2.35rem;
+  width: auto;
+  display: block;
+  flex: none;
 }
 
 .steps {

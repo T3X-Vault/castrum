@@ -331,11 +331,14 @@ export function Castrum() {
 
         {hud.phase === "menu" && (
           <>
-            <img className="menu-mark" src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={72} height={66} />
             <p className="trailer-chip">Trailer</p>
             <section className="menu">
               <h1>CASTRUM</h1>
-              <p className="lede">Hold the ford.</p>
+              <div className="lede-row">
+                <img src="/brand/futuret3ch-mark.png" alt="Supported by Futuret3ch" width={44} height={40} />
+                <img src="/brand/t3x-badge.png" alt="T3X" width={40} height={42} />
+                <p className="lede">Hold the ford.</p>
+              </div>
               <div className="menu-actions">
                 <button className="primary" data-testid="begin" onClick={() => press({ t: "start" })}>
                   Start game
