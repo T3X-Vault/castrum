@@ -647,7 +647,7 @@ export function Castrum() {
               )}
               {community === "connect" && (
                 <div className="brand-row">
-                  <a className="brand-x" href="https://x.com/futuret3ch" target="_blank" rel="noreferrer">
+                  <a className="brand-x" href="https://x.com/futuret3chdev" target="_blank" rel="noreferrer">
                     <XMark />
                     <span>X</span>
                   </a>
@@ -727,11 +727,11 @@ export function Castrum() {
                       The studio site
                     </span>
                   </a>
-                  <a className="brand-x" href="https://x.com/futuret3ch" target="_blank" rel="noreferrer">
+                  <a className="brand-x" href="https://x.com/futuret3chdev" target="_blank" rel="noreferrer">
                     <XMark />
                     <span>
                       <b>X</b>
-                      @futuret3ch
+                      @futuret3chdev
                     </span>
                   </a>
                 </div>
