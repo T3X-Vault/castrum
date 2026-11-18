@@ -56,10 +56,13 @@ test("non-.sql entries are dropped (readdir also yields the auth/ directory)", (
   assert.deepEqual(pendingMigrations(["auth", "README.md"], []), []);
 });
 
-test("the auth schema ships outside the globbed directory", () => {
+test("sign-in applies the auth schema from the globbed directory", () => {
   const migrationsDir = join(projectRoot(), "migrations");
-  assert.deepEqual(pendingMigrations(readdirSync(migrationsDir), []), []);
   assert.ok(readdirSync(join(migrationsDir, "auth")).includes("0001_auth.sql"));
+  assert.deepEqual(
+    pendingMigrations(readdirSync(migrationsDir), []).map((row) => row.name),
+    ["0001_auth.sql"],
+  );
 });
 
 test("this workspace's auth schema copy is byte-identical to its source", () => {
